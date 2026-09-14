@@ -25,6 +25,12 @@ jobs:
         with:
           node-version: '22'
 
+      # analyze.mjs depende de "typescript" (ver analyzers-node/package.json) — sin
+      # instalar, el subproceso real muere con ERR_MODULE_NOT_FOUND.
+      - name: Install analyzers-node dependencies
+        working-directory: analyzers-node
+        run: npm ci
+
       - name: Restore
         run: dotnet restore backend/Stratalens.slnx
 
