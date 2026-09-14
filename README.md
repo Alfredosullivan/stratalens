@@ -1,5 +1,7 @@
 # Stratalens
 
+[![CI](https://github.com/Alfredosullivan/stratalens/actions/workflows/ci.yml/badge.svg)](https://github.com/Alfredosullivan/stratalens/actions/workflows/ci.yml)
+
 Mapa de arquitectura y observabilidad para repositorios full-stack: análisis estático de código + telemetría en vivo (OpenTelemetry) sobre el mismo grafo.
 
 Repo: https://github.com/Alfredosullivan/stratalens
