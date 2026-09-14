@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>361ec3ce-174d-49b6-8526-72cbac19fb17</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AspNet.Security.OAuth.GitHub" Version="10.0.0" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <!-- Google.Protobuf: runtime para deserializar el payload OTLP. Grpc.Tools: compila
+         los .proto en tiempo de build (solo en build, por eso PrivateAssets=all). -->
+    <PackageReference Include="Google.Protobuf" Version="3.36.1" />
+    <PackageReference Include="Grpc.Tools" Version="2.83.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- Compila los .proto oficiales de OpenTelemetry (vendorizados en Protos/) a clases C#.
+       GrpcServices=None: solo generamos los mensajes (ExportTraceServiceRequest, Span...),
+       no los stubs de servicio gRPC — la ingesta llega por HTTP, no por gRPC. -->
+  <ItemGroup>
+    <Protobuf Include="Protos\**\*.proto" ProtoRoot="Protos" GrpcServices="None" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Stratalens.Application\Stratalens.Application.csproj" />
+    <ProjectReference Include="..\Stratalens.Infrastructure\Stratalens.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

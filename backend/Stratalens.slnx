@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Stratalens.Api/Stratalens.Api.csproj" />
+    <Project Path="src/Stratalens.Application/Stratalens.Application.csproj" />
+    <Project Path="src/Stratalens.Domain/Stratalens.Domain.csproj" />
+    <Project Path="src/Stratalens.Infrastructure/Stratalens.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Stratalens.Api.Tests/Stratalens.Api.Tests.csproj" />
+    <Project Path="tests/Stratalens.Domain.Tests/Stratalens.Domain.Tests.csproj" />
+    <Project Path="tests/Stratalens.Infrastructure.Tests/Stratalens.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

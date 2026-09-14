@@ -1,0 +1,17 @@
+/* Base mínima. El canvas del grafo necesita ocupar todo el viewport,
+   por eso html/body/#root van a 100% de altura desde el inicio. */
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  color-scheme: light dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}

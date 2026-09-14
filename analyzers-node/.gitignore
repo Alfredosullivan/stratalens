@@ -1,0 +1,2 @@
+# Dependencias instaladas (se restauran con `npm install`, no se versionan).
+node_modules/

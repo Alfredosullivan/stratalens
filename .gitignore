@@ -1,0 +1,30 @@
+# === .NET ===
+# Artefactos de compilación: se regeneran con `dotnet build`, nunca se versionan.
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+.vs/
+
+# === Node / Frontend (T2 en adelante) ===
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# === Variables de entorno y secretos ===
+# Nunca versionar credenciales reales (regla absoluta de CLAUDE.md).
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+
+# === Editor / SO ===
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# === Claude Code (local, específico de esta máquina) ===
+.claude/settings.local.json

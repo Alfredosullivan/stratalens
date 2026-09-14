@@ -1,0 +1,14 @@
+{
+  "name": "stratalens-analyzers-node",
+  "version": "0.1.0",
+  "description": "Analyzer de React/TypeScript (subproceso invocado por el backend .NET). Lee archivos por stdin y devuelve componentes, imports y llamadas a API por stdout en JSON.",
+  "type": "module",
+  "private": true,
+  "main": "src/analyze.mjs",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "typescript": "^5.6.0"
+  }
+}

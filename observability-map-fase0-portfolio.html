@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Observability Map — Fase 0: Fundaciones</title>
+<style>
+  /* ===== Identidad visual: "consola de observabilidad" oscura ===== */
+  :root {
+    --bg: #0a0e14;
+    --panel: #111823;
+    --panel-2: #161f2e;
+    --border: #223049;
+    --text: #e6edf3;
+    --muted: #8b9bb4;
+    --cyan: #38bdf8;
+    --green: #4ade80;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --violet: #a78bfa;
+    --mono: ui-monospace, "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(900px 500px at 80% -10%, rgba(56,189,248,0.10), transparent),
+      radial-gradient(700px 400px at 0% 0%, rgba(167,139,250,0.08), transparent),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+  }
+  a { color: var(--cyan); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  .mono { font-family: var(--mono); }
+
+  /* ===== Hero ===== */
+  header.hero {
+    border-bottom: 1px solid var(--border);
+    padding: 64px 0 48px;
+    position: relative;
+    overflow: hidden;
+  }
+  .badge-live {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 12px; letter-spacing: 1px;
+    color: var(--green); border: 1px solid rgba(74,222,128,0.35);
+    background: rgba(74,222,128,0.08); padding: 5px 12px; border-radius: 999px;
+    text-transform: uppercase;
+  }
+  .badge-live::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green); box-shadow: 0 0 10px var(--green);
+    animation: pulse 1.6s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .hero h1 {
+    font-size: clamp(34px, 6vw, 58px); margin: 20px 0 6px; line-height: 1.05;
+    letter-spacing: -1px;
+  }
+  .hero h1 .accent { color: var(--cyan); }
+  .hero .sub { color: var(--muted); font-size: clamp(16px, 2.5vw, 20px); max-width: 640px; }
+  .hero .phase-tag {
+    font-family: var(--mono); color: var(--violet); font-size: 14px; letter-spacing: 2px;
+    text-transform: uppercase; margin-top: 18px; display: block;
+  }
+
+  /* Motivo de grafo (nodos conectados) */
+  .graph-motif { display: flex; align-items: center; gap: 6px; margin-top: 28px; flex-wrap: wrap; font-family: var(--mono); font-size: 13px; }
+  .node {
+    padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel-2); white-space: nowrap;
+  }
+  .node.fe { color: var(--cyan); border-color: rgba(56,189,248,0.4); }
+  .node.be { color: var(--green); border-color: rgba(74,222,128,0.4); }
+  .node.db { color: var(--amber); border-color: rgba(251,191,36,0.4); }
+  .edge { color: var(--muted); }
+
+  /* ===== Stats ===== */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 36px; }
+  .stat {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 16px; text-align: center;
+  }
+  .stat .num { font-family: var(--mono); font-size: 30px; font-weight: 700; color: var(--cyan); }
+  .stat .lbl { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+  /* ===== Secciones ===== */
+  section { padding: 56px 0; border-bottom: 1px solid var(--border); }
+  .kicker {
+    font-family: var(--mono); color: var(--cyan); font-size: 13px; letter-spacing: 2px;
+    text-transform: uppercase; margin: 0 0 8px;
+  }
+  h2 { font-size: clamp(24px, 4vw, 34px); margin: 0 0 8px; letter-spacing: -0.5px; }
+  section > .wrap > p.lead { color: var(--muted); max-width: 720px; }
+
+  /* ===== Grids de tarjetas ===== */
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 28px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 17px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .card .why { color: var(--green); font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  .tag {
+    display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px;
+    border-radius: 6px; border: 1px solid var(--border); color: var(--muted); margin: 0 6px 6px 0;
+  }
+
+  /* ===== Bloques de código / árbol ===== */
+  pre {
+    background: #0b1220; border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; overflow-x: auto; font-family: var(--mono); font-size: 13px;
+    color: #cbd5e1; line-height: 1.55;
+  }
+  .diagram { color: var(--cyan); }
+
+  /* ===== Bugs ===== */
+  .bug { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--red);
+    border-radius: 10px; padding: 18px 20px; margin-top: 16px; }
+  .bug h3 { margin: 0 0 6px; font-size: 16px; }
+  .bug .sev { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    padding: 2px 8px; border-radius: 6px; margin-left: 8px; }
+  .sev.build { background: rgba(248,113,113,0.12); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+  .sev.test { background: rgba(251,191,36,0.12); color: var(--amber); border: 1px solid rgba(251,191,36,0.3); }
+  .sev.infra { background: rgba(56,189,248,0.12); color: var(--cyan); border: 1px solid rgba(56,189,248,0.3); }
+  .bug .row { margin-top: 8px; font-size: 14.5px; }
+  .bug .row b { color: var(--text); }
+  .bug .row.cause { color: var(--muted); }
+  .bug .row.fix { color: var(--green); }
+
+  /* ===== Q&A ===== */
+  details {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 4px 20px; margin-top: 12px;
+  }
+  details[open] { border-color: rgba(56,189,248,0.4); }
+  summary { cursor: pointer; padding: 14px 0; font-weight: 600; font-size: 15.5px; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸"; color: var(--cyan); margin-right: 10px; }
+  details[open] summary::before { content: "▾"; }
+  details p { color: var(--muted); margin: 0 0 16px; font-size: 14.5px; }
+
+  footer { padding: 40px 0 60px; text-align: center; color: var(--muted); font-size: 13px; }
+  footer .mono { color: var(--cyan); }
+
+  @media (max-width: 720px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge-live">Fase 0 · Completada</span>
+    <h1><span class="accent">Observability</span> Map</h1>
+    <p class="sub">Plataforma que analiza una aplicación full-stack y construye un mapa vivo de su arquitectura y su comportamiento en tiempo real.</p>
+    <span class="phase-tag">// Fundaciones — backend, datos y autenticación</span>
+
+    <div class="graph-motif">
+      <span class="node fe">React&nbsp;Frontend</span>
+      <span class="edge">──HTTP──▶</span>
+      <span class="node be">ASP.NET&nbsp;Core&nbsp;API</span>
+      <span class="edge">──SQL──▶</span>
+      <span class="node db">PostgreSQL</span>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="num">6/6</div><div class="lbl">Tareas Fase 0</div></div>
+      <div class="stat"><div class="num">38</div><div class="lbl">Tests en verde</div></div>
+      <div class="stat"><div class="num">4</div><div class="lbl">Capas (Clean Arch)</div></div>
+      <div class="stat"><div class="num">0</div><div class="lbl">Secretos en repo</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- ===== Overview ===== -->
+<section>
+  <div class="wrap">
+    <p class="kicker">01 · El problema</p>
+    <h2>Tu arquitectura debería documentarse sola</h2>
+    <p class="lead">
+      Para entender una app full-stack, un desarrollador salta entre VS Code, GitHub, el CI/CD,
+      la base de datos, los logs y las métricas, y arma el mapa mental a mano. No existe un lugar
+      único que muestre visualmente cómo se conectan las piezas — ni en diseño (qué existe) ni en
+      tiempo real (qué está pasando ahora). Este proyecto ataca eso.
+    </p>
+    <p class="lead" style="margin-top:16px">
+      La <b>Fase 0</b> no dibuja el mapa todavía: construye los <b>cimientos</b> sobre los que se
+      apoyará todo — una arquitectura limpia, un modelo de datos que se protege a sí mismo,
+      persistencia real en PostgreSQL y autenticación segura con GitHub. Base sólida antes que features.
+    </p>
+  </div>
+</section>
+
+<!-- ===== Stack ===== -->
+<section>
+  <div class="wrap">
+    <p class="kicker">02 · Stack &amp; decisiones</p>
+    <h2>Cada tecnología, con su "¿por qué?"</h2>
+    <div class="grid-2">
+      <div class="card">
+        <span class="why">¿Por qué .NET 10 + EF Core?</span>
+        <h3>ASP.NET Core Web API</h3>
+        <p>Backend tipado, maduro y con un ecosistema de seguridad de primera (Data Protection, autenticación integrada). EF Core para el acceso a datos detrás de abstracciones.</p>
+      </div>
+      <div class="card">
+        <span class="why">¿Por qué PostgreSQL y no Neo4j?</span>
+        <h3>PostgreSQL (grafo sobre tablas)</h3>
+        <p>Un grafo de nodos/edges no necesita una base de datos de grafos para consultas de 1-2 saltos. Postgres lo resuelve con índices, sin añadir una segunda tecnología de persistencia al MVP. Decisión reversible (aislada tras <span class="mono">IGraphRepository</span>).</p>
+      </div>
+      <div class="card">
+        <span class="why">¿Por qué React Flow (@xyflow/react)?</span>
+        <h3>React 19 + Vite + React Flow</h3>
+        <p>El canvas es el protagonista. React Flow da zoom, pan, nodos y edges custom. Se usó el paquete correcto y mantenido (<span class="mono">@xyflow/react</span> v12), no el antiguo <span class="mono">reactflow</span>.</p>
+      </div>
+      <div class="card">
+        <span class="why">¿Por qué Clean Architecture?</span>
+        <h3>Domain / Application / Infrastructure / Api</h3>
+        <p>El dominio no conoce frameworks; la infraestructura es un plug-in reemplazable. Cambiar la base de datos o el proveedor de código no toca la lógica de negocio.</p>
+      </div>
+      <div class="card">
+        <span class="why">¿Por qué cookie HttpOnly y no JWT?</span>
+        <h3>GitHub OAuth + cookie de sesión</h3>
+        <p>La cookie HttpOnly no es legible por JavaScript → protege contra XSS. GitHub solo se usa para el login externo; la sesión vive en la cookie. Más seguro que guardar un JWT en localStorage.</p>
+      </div>
+      <div class="card">
+        <span class="why">¿Por qué Testcontainers?</span>
+        <h3>Data Protection · Testcontainers</h3>
+        <p>El token de GitHub se cifra en reposo con la Data Protection API. Los tests de integración levantan un PostgreSQL real y efímero en Docker — sin mocks que mientan sobre el comportamiento de la DB.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Arquitectura ===== -->
+<section>
+  <div class="wrap">
+    <p class="kicker">03 · Arquitectura</p>
+    <h2>La regla de dependencia, dibujada</h2>
+    <p class="lead">Las dependencias apuntan siempre hacia adentro. El dominio, en el centro, no depende de nada.</p>
+    <pre class="diagram">        Api  ─────▶  Application  ─────▶  Domain
+         │               ▲                  (sin dependencias)
+         │               │
+         └─▶ Infrastructure  (implementa IGraphRepository,
+                              IUserRepository, ITokenProtector...)
+
+  Frontend (React) ──REST/cookie──▶ Api      (nunca toca la DB ni GitHub directo)</pre>
+
+    <p class="lead" style="margin-top:28px">Estructura del backend:</p>
+    <pre>backend/
+├── src/
+│   ├── ObservabilityMap.Domain/        # Node, Edge, Project, User + invariantes
+│   ├── ObservabilityMap.Application/    # Abstracciones (I...Repository) + casos de uso
+│   ├── ObservabilityMap.Infrastructure/ # EF Core, GraphRepository, cifrado, migraciones
+│   └── ObservabilityMap.Api/            # Controllers, OAuth, cookie, DI (composition root)
+└── tests/
+    ├── ObservabilityMap.Domain.Tests/        # 31 unit tests de invariantes
+    ├── ObservabilityMap.Infrastructure.Tests/ # 4 integration (Testcontainers)
+    └── ObservabilityMap.Api.Tests/            # 3 integration (auth + ownership)</pre>
+  </div>
+</section>
+
+<!-- ===== Features ===== -->
+<section>
+  <div class="wrap">
+    <p class="kicker">04 · Lo construido</p>
+    <h2>Features de la Fase 0</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>🧱 Modelo de dominio autoprotegido</h3>
+        <p>Node, Edge, Project y User con estados ilegales <i>irrepresentables</i>: factory methods, propiedades inmutables y constructores privados. Un Edge nunca puede existir sin origen o con una confianza incoherente.</p>
+      </div>
+      <div class="card">
+        <h3>🔌 Sistema de plugins de analyzers</h3>
+        <p><span class="mono">ILanguageAnalyzer</span> permite añadir un stack nuevo sin tocar el pipeline (principio Open/Closed). Mismo patrón adapter para proveedores de código (<span class="mono">IProviderConnector</span>).</p>
+      </div>
+      <div class="card">
+        <h3>🗄️ Persistencia con EF Core + JSONB</h3>
+        <p>Grafo en PostgreSQL con metadata en <span class="mono">jsonb</span>, guardado idempotente y transaccional (borra+inserta atómico), y lecturas <span class="mono">AsNoTracking</span>.</p>
+      </div>
+      <div class="card">
+        <h3>🔐 Login con GitHub (OAuth)</h3>
+        <p>Flujo "Sign in with GitHub" con cookie HttpOnly, scopes mínimos (<span class="mono">read:user</span>, <span class="mono">public_repo</span>) y secretos fuera del repo (user-secrets).</p>
+      </div>
+      <div class="card">
+        <h3>🛡️ Token cifrado en reposo</h3>
+        <p>El access_token se cifra con Data Protection API y se guarda como <i>shadow property</i> — la columna existe en la tabla pero no en el modelo de dominio. Verificado leyendo la columna cruda por SQL.</p>
+      </div>
+      <div class="card">
+        <h3>✅ Aislamiento entre usuarios</h3>
+        <p>Ownership check en cada proyecto: acceder a un recurso ajeno devuelve 404 (no 403) para no filtrar su existencia. Probado con un test de acceso cruzado.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Bugs ===== -->
+<section>
+  <div class="wrap">
+    <p class="kicker">05 · Bugs reales resueltos</p>
+    <h2>Diagnóstico de causa raíz, no parches</h2>
+
+    <div class="bug">
+      <h3>Conflicto de versiones de EF Core <span class="sev build">Build · CS1705</span></h3>
+      <div class="row"><b>Síntoma:</b> el proyecto de test no compilaba: "Infrastructure usa EF Core 10.0.12 pero se referencia 10.0.4".</div>
+      <div class="row cause"><b>Causa:</b> el provider de Npgsql arrastraba EF Core 10.0.4, y <span class="mono">EntityFrameworkCore.Design</span> forzaba 10.0.12 en Infrastructure. Como Design es dependencia privada, el test solo veía la 10.0.4.</div>
+      <div class="row fix"><b>Fix:</b> referencia directa (no privada) a <span class="mono">Microsoft.EntityFrameworkCore.Relational 10.0.12</span> en Infrastructure para que la versión correcta fluya a los consumidores.</div>
+    </div>
+
+    <div class="bug">
+      <h3>Connection string vacío en tests del Api <span class="sev test">Test · runtime</span></h3>
+      <div class="row"><b>Síntoma:</b> los tests de integración fallaban en <span class="mono">MigrateAsync</span> con <span class="mono">InvalidOperationException</span> de Npgsql.</div>
+      <div class="row cause"><b>Causa:</b> el <span class="mono">ConfigureAppConfiguration</span> del test no llegaba a <span class="mono">Program.cs</span> a tiempo — la cadena de conexión se lee al registrar el DbContext, antes de que la config de test se aplicara.</div>
+      <div class="row fix"><b>Fix:</b> sobrescribir el registro del DbContext en <span class="mono">ConfigureTestServices</span> (que sí corre después): <span class="mono">RemoveAll</span> + <span class="mono">AddDbContext</span> con la cadena del contenedor.</div>
+    </div>
+
+    <div class="bug">
+      <h3>ConfigureTestServices no reconocido <span class="sev build">Build · CS1061</span></h3>
+      <div class="row"><b>Síntoma:</b> "IWebHostBuilder no contiene una definición para ConfigureTestServices".</div>
+      <div class="row cause"><b>Causa:</b> el método es una extensión que vive en un namespace distinto al importado por defecto.</div>
+      <div class="row fix"><b>Fix:</b> añadir <span class="mono">using Microsoft.AspNetCore.TestHost;</span>.</div>
+    </div>
+
+    <div class="bug">
+      <h3>Warnings de nullable con el ctor de EF <span class="sev build">Build · CS8618</span></h3>
+      <div class="row"><b>Síntoma:</b> al añadir el constructor privado sin parámetros que necesita EF, las propiedades <span class="mono">string</span> no-nullable disparaban warnings.</div>
+      <div class="row cause"><b>Causa:</b> el ctor vacío no inicializa esas propiedades; EF las rellena después por sus backing fields, pero el compilador no lo sabe.</div>
+      <div class="row fix"><b>Fix:</b> patrón EF <span class="mono">= null!</span> en las propiedades string, declarando que EF garantiza el valor al rehidratar.</div>
+    </div>
+
+    <div class="bug">
+      <h3>Puerto 5432 ya ocupado <span class="sev infra">Infra · Docker</span></h3>
+      <div class="row"><b>Síntoma:</b> otro proyecto ya tenía un contenedor Postgres asociado al 5432.</div>
+      <div class="row cause"><b>Causa:</b> colisión de puertos entre proyectos en la misma máquina.</div>
+      <div class="row fix"><b>Fix:</b> mapear el host al <span class="mono">5433:5432</span> en docker-compose, aislando este proyecto.</div>
+    </div>
+
+    <div class="bug">
+      <h3>API obsoleta de Testcontainers <span class="sev test">Test · warning</span></h3>
+      <div class="row"><b>Síntoma:</b> warning de deprecación del constructor <span class="mono">PostgreSqlBuilder()</span> sin parámetros.</div>
+      <div class="row cause"><b>Causa:</b> la librería recomienda pasar la imagen al constructor para builds reproducibles.</div>
+      <div class="row fix"><b>Fix:</b> <span class="mono">new PostgreSqlBuilder("postgres:18-alpine")</span> — build limpio sin warnings.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Q&A ===== -->
+<section>
+  <div class="wrap">
+    <p class="kicker">06 · Preparación para entrevista</p>
+    <h2>Preguntas &amp; respuestas modelo</h2>
+
+    <details open>
+      <summary>¿No viola Clean Architecture que la Api referencie a Infrastructure?</summary>
+      <p>No. El composition root (<span class="mono">Program.cs</span>) es la única excepción legítima: es donde se ensambla la inyección de dependencias. La regla de dependencia se cumple porque ningún controller ni entidad usa tipos concretos de Infrastructure — solo <span class="mono">Program.cs</span> los ve, y solo para registrarlos en el contenedor de DI.</p>
+    </details>
+
+    <details>
+      <summary>¿Por qué el dominio no depende de nada?</summary>
+      <p>Por la regla de dependencia: el dominio contiene las reglas de negocio, que son estables, y no debe conocer detalles volátiles como el ORM o la base de datos. Mantenerlo puro lo hace testeable en aislamiento (milisegundos, sin DB) y permite cambiar infraestructura sin tocar la lógica.</p>
+    </details>
+
+    <details>
+      <summary>¿Anemic o Rich Domain Model?</summary>
+      <p>Rich, cuando la entidad tiene invariantes que proteger. Meter las reglas en un service crea un modelo anémico: la entidad no garantiza su validez y cualquier código puede corromperla. Con constructores validadores y factory methods, los estados ilegales son <i>irrepresentables</i> — no dependes de que todos recuerden validar.</p>
+    </details>
+
+    <details>
+      <summary>¿Cómo persistes un dominio rico con EF Core sin romper la encapsulación?</summary>
+      <p>Con un constructor privado sin parámetros solo para EF (rehidrata sin ejecutar validación ni regenerar el Id) y propiedades de solo lectura que EF puebla por sus backing fields. Los factory methods siguen siendo el único camino público de creación.</p>
+    </details>
+
+    <details>
+      <summary>¿Cómo guardas de forma segura un token de terceros?</summary>
+      <p>Cifrado en reposo con una API que gestione las llaves (Data Protection), la columna fuera del modelo de dominio (shadow property), y verificado con un test que lee la columna cruda por SQL para confirmar que no está en texto plano.</p>
+    </details>
+
+    <details>
+      <summary>¿Cómo evitas acoplar Infrastructure al framework web?</summary>
+      <p>Con abstracciones. Un adapter que necesita el token del usuario no lee <span class="mono">HttpContext</span> directamente (eso lo ataría a ASP.NET); depende de <span class="mono">IAccessTokenProvider</span>, y la implementación que sí conoce <span class="mono">HttpContext</span> vive en la capa web. Así Infrastructure se testea sin un servidor HTTP.</p>
+    </details>
+
+    <details>
+      <summary>¿Por qué el ownership check devuelve 404 y no 403?</summary>
+      <p>Un 403 revela que el recurso existe pero no es tuyo. Devolver 404 para recursos ajenos no filtra su existencia — un usuario no puede deducir qué proyectos tienen otros. Es una decisión de seguridad, no de comodidad.</p>
+    </details>
+
+    <details>
+      <summary>Dos records idénticos (AnalysisResult y ProjectGraph): ¿no viola DRY?</summary>
+      <p>No. DRY es sobre no duplicar conocimiento o lógica, no sobre no repetir una forma. Son dos conceptos distintos (salida parcial de un analyzer vs grafo total persistido) que evolucionarán distinto; unificarlos por parecerse sería acoplamiento accidental.</p>
+    </details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="mono">// Observability Map — Fase 0: Fundaciones · 38 tests ✔</p>
+    <p>Backend: ASP.NET Core 10 · EF Core · PostgreSQL · GitHub OAuth &nbsp;|&nbsp; Frontend: React 19 · Vite · React Flow</p>
+    <p>Siguiente fase → Static Discovery: analizar un repo real y construir el grafo.</p>
+  </div>
+</footer>
+
+</body>
+</html>

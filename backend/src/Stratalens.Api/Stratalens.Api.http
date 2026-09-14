@@ -1,0 +1,6 @@
+@Stratalens.Api_HostAddress = http://localhost:5245
+
+GET {{Stratalens.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
