@@ -8,6 +8,9 @@ export interface GraphNode {
   type: string;      // ej. "React", "AspNetCore", "PostgreSQL"
   category: string;  // ej. "Application", "Database"
   metadata: Record<string, string>;
+  // Jerarquía (T33): id del nodo padre, o null/ausente si es raíz. Lo usará el render
+  // anidado de React Flow (T35). Null para todos los nodos hoy — nada asigna padre hasta T34.
+  parentNodeId?: string | null;
 }
 
 export interface GraphEdge {

@@ -13,12 +13,14 @@ const TECH_LABELS: Record<string, string> = {
   AspNetCore: 'ASP.NET Core',
   React: 'React',
   PostgreSQL: 'PostgreSQL',
+  MessageBus: 'Message Bus',
 };
 
 // Etiquetas para claves de metadata conocidas (el resto se muestra con su clave cruda).
 const META_LABELS: Record<string, string> = {
   source: 'Archivo de origen',
   language: 'Lenguaje',
+  framework: 'Framework',
 };
 
 // Panel lateral con el detalle del nodo seleccionado: tecnología, categoría y su Source

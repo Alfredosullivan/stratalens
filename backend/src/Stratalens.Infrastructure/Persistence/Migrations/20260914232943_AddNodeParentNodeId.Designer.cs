@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Stratalens.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Stratalens.Infrastructure.Persistence;
 namespace Stratalens.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(StratalensDbContext))]
-    partial class StratalensDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260914232943_AddNodeParentNodeId")]
+    partial class AddNodeParentNodeId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

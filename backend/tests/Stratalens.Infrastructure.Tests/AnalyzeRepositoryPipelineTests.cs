@@ -43,15 +43,29 @@ public class AnalyzeRepositoryPipelineTests
         // --- Act ---
         var graph = await useCase.ExecuteAsync(project.Id, Repo);
 
-        // --- Assert: 3 nodos gruesos ---
-        Assert.Equal(3, graph.Nodes.Count);
+        // --- Assert: 6 nodos = 3 gruesos (Frontend/Backend/PostgreSQL) + 3 hijos del Backend
+        // (Controller/Service/Repository colgados por ParentNodeId — T34; el DbContext no es
+        // hijo, se volvió el nodo PostgreSQL) ---
+        Assert.Equal(6, graph.Nodes.Count);
         var byName = graph.Nodes.ToDictionary(n => n.Name, n => n);
 
         Assert.Equal(NodeCategory.Application, byName["Frontend"].Category);
         Assert.Equal("React", byName["Frontend"].Type);
         Assert.Equal(NodeCategory.Application, byName["Backend"].Category);
         Assert.Equal("AspNetCore", byName["Backend"].Type);
+        Assert.Null(byName["Backend"].ParentNodeId); // el Backend es raíz
         Assert.Equal(NodeCategory.Database, byName["PostgreSQL"].Category);
+
+        // Los 3 hijos del Backend (Controller/Service/Repository), todos con ParentNodeId =
+        // Backend.Id y Category=Code. El DbContext NO está entre ellos (es PostgreSQL).
+        var backendId = byName["Backend"].Id;
+        var children = graph.Nodes.Where(n => n.ParentNodeId == backendId).ToList();
+        Assert.Equal(3, children.Count);
+        Assert.All(children, c => Assert.Equal(NodeCategory.Code, c.Category));
+        Assert.Contains(children, c => c.Name == "ProductsController");
+        Assert.Contains(children, c => c.Name == "ProductService");
+        Assert.Contains(children, c => c.Name == "ProductRepository");
+        Assert.DoesNotContain(graph.Nodes, n => n.Type == "DbContext");
 
         // --- Assert: 2 edges de alto nivel con su evidencia ---
         Assert.Equal(2, graph.Edges.Count);

@@ -27,7 +27,11 @@ public record GraphNodeDto(
     string Name,
     string Type,
     string Category,
-    IReadOnlyDictionary<string, string> Metadata);
+    IReadOnlyDictionary<string, string> Metadata,
+    // Jerarquía (T33): id del nodo padre, o null si es raíz. El frontend lo usa para anidar
+    // (React Flow parent/child en T35). Null para todos los nodos hoy — nada asigna padre
+    // hasta T34.
+    Guid? ParentNodeId);
 
 // Source/Target son los ids de los nodos (nombres que React Flow espera en un edge).
 // SourceFile es el ORIGEN de detección (archivo/config), que es cosa distinta.

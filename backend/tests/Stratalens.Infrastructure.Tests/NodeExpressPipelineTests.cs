@@ -31,7 +31,11 @@ public class NodeExpressPipelineTests
         {
             new NodeExpressAnalyzer(),
             new ReactTypeScriptAnalyzer(new FakeRunner(FrontendAnalysisJson)),
-            new DockerAnalyzer()
+            new DockerAnalyzer(),
+            new AuthAnalyzer(),
+            new MessageBusAnalyzer(),
+            new WorkersAnalyzer(),
+            new CloudAnalyzer()
         };
 
         var useCase = new AnalyzeRepositoryUseCase(
@@ -40,20 +44,42 @@ public class NodeExpressPipelineTests
         // --- Act ---
         var graph = await useCase.ExecuteAsync(project.Id, Repo);
 
-        // --- Assert: 4 nodos gruesos (Frontend/Backend/PostgreSQL + Docker, T30) ---
-        Assert.Equal(4, graph.Nodes.Count);
+        // --- Assert: 10 nodos = 8 gruesos (Frontend/Backend/PostgreSQL/Docker/JWT/RabbitMQ/
+        // Workers/AWS) + 2 hijos del Backend (los controllers/routes, ParentNodeId — T34) ---
+        Assert.Equal(10, graph.Nodes.Count);
         var byName = graph.Nodes.ToDictionary(n => n.Name, n => n);
 
         Assert.Equal(NodeCategory.Application, byName["Frontend"].Category);
         Assert.Equal("React", byName["Frontend"].Type);
         Assert.Equal(NodeCategory.Application, byName["Backend"].Category);
         Assert.Equal("Express", byName["Backend"].Type); // distinto de "AspNetCore"
+        Assert.Null(byName["Backend"].ParentNodeId);      // el Backend es raíz
         Assert.Equal(NodeCategory.Database, byName["PostgreSQL"].Category);
         Assert.Equal(NodeCategory.Infrastructure, byName["Docker"].Category);
         Assert.Equal("Dockerfile", byName["Docker"].Metadata["source"]);
+        Assert.Equal(NodeCategory.Security, byName["JWT"].Category); // T32
+        Assert.Equal("package.json", byName["JWT"].Metadata["source"]);
+        Assert.Equal(NodeCategory.Infrastructure, byName["RabbitMQ"].Category); // T36
+        Assert.Equal("MessageBus", byName["RabbitMQ"].Type);
+        Assert.Equal("package.json", byName["RabbitMQ"].Metadata["source"]);
+        Assert.Equal(NodeCategory.Worker, byName["Workers"].Category); // T37
+        Assert.Equal("BullMQ", byName["Workers"].Metadata["framework"]);
+        Assert.Equal(NodeCategory.Deployment, byName["AWS"].Category); // T38
+        Assert.Equal("Cloud", byName["AWS"].Type);
+
+        // Los 2 hijos del Backend: report.controller y report.routes, ambos con
+        // ParentNodeId = Backend.Id y Category=Code (T34). El marcador de DB (PgPool) NO
+        // aparece como hijo (se volvió el nodo PostgreSQL).
+        var backendId = byName["Backend"].Id;
+        var children = graph.Nodes.Where(n => n.ParentNodeId == backendId).ToList();
+        Assert.Equal(2, children.Count);
+        Assert.All(children, c => Assert.Equal(NodeCategory.Code, c.Category));
+        Assert.Contains(children, c => c.Name == "report.controller");
+        Assert.Contains(children, c => c.Name == "report.routes");
+        Assert.DoesNotContain(graph.Nodes, n => n.Type == "PgPool");
 
         // --- Assert: edges de alto nivel, mismas confidences que el resto del sistema ---
-        Assert.Equal(3, graph.Edges.Count); // +1 Backend→Docker
+        Assert.Equal(7, graph.Edges.Count); // +1 Backend→Cloud (T38)
         var nameById = graph.Nodes.ToDictionary(n => n.Id, n => n.Name);
 
         var frontToBack = graph.Edges.Single(e => e.Type == "HTTP/REST");
@@ -68,6 +94,36 @@ public class NodeExpressPipelineTests
         Assert.Equal("Backend", nameById[backToDocker.SourceNodeId]);
         Assert.Equal("Docker", nameById[backToDocker.TargetNodeId]);
         Assert.Equal("Dockerfile", backToDocker.Source);
+
+        // Security → Backend ("validates"): la seguridad valida las requests hacia el backend
+        // (narrativa Archify "Validate Token"), no una dependencia de librería.
+        var securityToBackend = graph.Edges.Single(e => e.Type == "validates");
+        Assert.Equal("JWT", nameById[securityToBackend.SourceNodeId]);
+        Assert.Equal("Backend", nameById[securityToBackend.TargetNodeId]);
+        Assert.Equal("package.json", securityToBackend.Source);
+        Assert.Equal(90, securityToBackend.Confidence);
+
+        // Backend → MessageBus ("messaging", T36): el backend usa el bus (neutral, no afirma
+        // publica/consume). RabbitMQ detectado por la dependencia amqplib del package.json.
+        var backToBus = graph.Edges.Single(e => e.Type == "messaging");
+        Assert.Equal("Backend", nameById[backToBus.SourceNodeId]);
+        Assert.Equal("RabbitMQ", nameById[backToBus.TargetNodeId]);
+        Assert.Equal("package.json", backToBus.Source);
+        Assert.Equal(90, backToBus.Confidence);
+
+        // Backend → Workers ("background jobs", T37): BullMQ detectado por la dependencia.
+        var backToWorkers = graph.Edges.Single(e => e.Type == "background jobs");
+        Assert.Equal("Backend", nameById[backToWorkers.SourceNodeId]);
+        Assert.Equal("Workers", nameById[backToWorkers.TargetNodeId]);
+        Assert.Equal("package.json", backToWorkers.Source);
+        Assert.Equal(90, backToWorkers.Confidence);
+
+        // Backend → Cloud ("cloud services", T38): AWS detectado por @aws-sdk/client-s3.
+        var backToCloud = graph.Edges.Single(e => e.Type == "cloud services");
+        Assert.Equal("Backend", nameById[backToCloud.SourceNodeId]);
+        Assert.Equal("AWS", nameById[backToCloud.TargetNodeId]);
+        Assert.Equal("package.json", backToCloud.Source);
+        Assert.Equal(90, backToCloud.Confidence);
     }
 
     // El frontend JSX no pasa por el subproceso Node real en este test (ya probado en
@@ -91,7 +147,7 @@ public class NodeExpressPipelineTests
     // UNO con su propio package.json — misma forma que airbnb-finance-assistant.
     private static readonly Dictionary<string, string> Fixture = new()
     {
-        ["package.json"] = """{ "name": "demo", "dependencies": { "express": "5.2.1", "pg": "8.20.0" } }""",
+        ["package.json"] = """{ "name": "demo", "dependencies": { "express": "5.2.1", "pg": "8.20.0", "jsonwebtoken": "9.0.2", "amqplib": "0.10.4", "bullmq": "5.7.0", "@aws-sdk/client-s3": "3.600.0" } }""",
         ["src/controllers/report.controller.js"] = "// controller",
         ["src/routes/report.routes.js"] = "// routes",
         ["Dockerfile"] = "FROM node:22-alpine",

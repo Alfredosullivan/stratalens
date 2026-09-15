@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Background, Controls, MiniMap, ReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { GraphNode, ProjectGraph } from '../graph/types';
@@ -6,11 +6,13 @@ import type { LiveTraceEvent } from '../live/types';
 import { mapToReactFlow, type GraphFlowNodeData } from '../graph/mapToReactFlow';
 import { resolveTracePath } from '../graph/resolveTracePath';
 import { TerminalNode } from './nodes/TerminalNode';
+import { ContainerNode } from './nodes/ContainerNode';
+import { ComponentChip } from './nodes/ComponentChip';
 import { github } from '../theme/githubDark';
 
 // Definido FUERA del componente: React Flow re-monta todos los nodos custom si el objeto
 // nodeTypes cambia de referencia en cada render (trampa habitual de la librería).
-const nodeTypes = { terminal: TerminalNode };
+const nodeTypes = { terminal: TerminalNode, container: ContainerNode, component: ComponentChip };
 
 interface GraphCanvasProps {
   graph: ProjectGraph;
@@ -25,6 +27,19 @@ interface GraphCanvasProps {
 // la representación de React Flow (memoizada) y monta el lienzo con zoom/pan/minimapa.
 // No sabe de dónde salió el grafo (fetch, demo...), eso es responsabilidad de la página.
 export function GraphCanvas({ graph, onSelectNode, liveEvent }: GraphCanvasProps) {
+  // Jerarquía (T35): qué nodos padre están expandidos. Vacío = todo colapsado por defecto
+  // (overview a nivel Sistema primero, detalle bajo demanda). Ids obsoletos tras cambiar de
+  // proyecto son inofensivos: simplemente no matchean ningún nodo.
+  const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(new Set());
+  const toggleExpand = useCallback((nodeId: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return next;
+    });
+  }, []);
+
   // Edges del recorrido del último trace (vacío si no hay evento o no resuelve a edges).
   const highlightedEdgeIds = useMemo(
     () => (liveEvent ? resolveTracePath(graph, liveEvent) : new Set<string>()),
@@ -32,8 +47,8 @@ export function GraphCanvas({ graph, onSelectNode, liveEvent }: GraphCanvasProps
   );
 
   const { nodes, edges } = useMemo(
-    () => mapToReactFlow(graph, highlightedEdgeIds),
-    [graph, highlightedEdgeIds],
+    () => mapToReactFlow(graph, highlightedEdgeIds, expandedIds, toggleExpand),
+    [graph, highlightedEdgeIds, expandedIds, toggleExpand],
   );
 
   return (

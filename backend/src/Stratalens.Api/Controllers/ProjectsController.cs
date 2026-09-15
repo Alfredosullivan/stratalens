@@ -217,7 +217,7 @@ public class ProjectsController : ControllerBase
     private static GraphResponse ToDto(ProjectGraph graph) =>
         new(
             graph.Nodes
-                .Select(n => new GraphNodeDto(n.Id, n.Name, n.Type, n.Category.ToString(), n.Metadata))
+                .Select(n => new GraphNodeDto(n.Id, n.Name, n.Type, n.Category.ToString(), n.Metadata, n.ParentNodeId))
                 .ToList(),
             graph.Edges
                 .Select(e => new GraphEdgeDto(

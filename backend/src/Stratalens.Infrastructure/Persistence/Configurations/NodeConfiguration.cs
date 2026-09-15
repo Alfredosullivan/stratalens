@@ -24,6 +24,13 @@ public class NodeConfiguration : IEntityTypeConfiguration<Node>
             .HasColumnType("jsonb")
             .HasConversion(MetadataConversion.Converter, MetadataConversion.Comparer);
 
+        // Jerarquía (T33): columna nullable simple, SIN FK self-referencial. La integridad
+        // la garantiza el agregado (el grafo se guarda/borra como una unidad atómica por
+        // proyecto en SaveGraphAsync); una FK real chocaría con el ExecuteDeleteAsync masivo
+        // (borrar padre e hijos en un solo statement violaría la FK a mitad de camino, porque
+        // Postgres verifica integridad por fila). Decisión registrada en SDD/TASKS.md T33.
+        builder.Property(n => n.ParentNodeId);
+
         // Índice para la query más común: "dame los nodos de este proyecto".
         builder.HasIndex(n => n.ProjectId);
     }

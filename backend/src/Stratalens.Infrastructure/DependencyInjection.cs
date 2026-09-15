@@ -47,6 +47,10 @@ public static class DependencyInjection
         services.AddScoped<ILanguageAnalyzer, ReactTypeScriptAnalyzer>();
         services.AddScoped<ILanguageAnalyzer, NodeExpressAnalyzer>();
         services.AddScoped<ILanguageAnalyzer, DockerAnalyzer>();
+        services.AddScoped<ILanguageAnalyzer, AuthAnalyzer>();
+        services.AddScoped<ILanguageAnalyzer, MessageBusAnalyzer>();
+        services.AddScoped<ILanguageAnalyzer, WorkersAnalyzer>();
+        services.AddScoped<ILanguageAnalyzer, CloudAnalyzer>();
 
         // Runner del subproceso Node (seam). NODE_ANALYZER_SCRIPT es el escape hatch para
         // despliegues donde analyzers-node no queda como hermana del checkout (Docker/CI);
