@@ -14,6 +14,10 @@ const TYPE_COLORS: Record<string, string> = {
   AspNetCore: github.done,    // Backend
   PostgreSQL: github.success, // Database
   Docker: github.attention,   // Infraestructura (T30)
+  JWT: github.sponsors,       // Security (T32)
+  MessageBus: github.severe,  // Message Bus (T36): naranja, distinto de Docker
+  Workers: github.teal,       // Workers (T37): teal
+  Cloud: github.sky,          // Cloud AWS/Azure/GCP (T38): azul cielo
 };
 
 // Fallback por categoría para Types aún no mapeados arriba. Para categorías sin nodos
@@ -24,6 +28,7 @@ const CATEGORY_FALLBACK_COLORS: Record<string, string> = {
   Infrastructure: github.attention,
   DevOps: github.attention,
   Deployment: github.attention,
+  Security: github.sponsors, // rosa propio: un nodo de auth no debe verse igual que Docker
 };
 
 export function resolveNodeColor(node: GraphNode): string {

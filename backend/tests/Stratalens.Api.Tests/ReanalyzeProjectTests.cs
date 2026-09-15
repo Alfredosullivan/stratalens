@@ -23,8 +23,9 @@ public class ReanalyzeProjectTests : IClassFixture<CustomWebApplicationFactory>
         _factory = factory;
     }
 
-    // V1: solo un Controller → csharp detecta algo → SystemGraphBuilder crea SOLO "Backend"
-    // (sin DbContext no hay "PostgreSQL" ni edge, ver SystemGraphBuilder.Build).
+    // V1: solo un Controller → csharp lo detecta → SystemGraphBuilder crea "Backend" + su
+    // hijo ProductsController (T34, colgado por ParentNodeId). Sin DbContext no hay
+    // "PostgreSQL" ni edge (ver SystemGraphBuilder.Build).
     private static readonly IReadOnlyDictionary<string, string> FixtureSinDb = new Dictionary<string, string>
     {
         ["backend/Demo.Api.csproj"] = "<Project Sdk=\"Microsoft.NET.Sdk.Web\"></Project>",
@@ -107,7 +108,10 @@ public class ReanalyzeProjectTests : IClassFixture<CustomWebApplicationFactory>
 
         var firstGraph = await (await client.GetAsync($"/api/v1/projects/{created!.Id}/graph"))
             .Content.ReadFromJsonAsync<GraphResponse>();
-        Assert.Single(firstGraph!.Nodes); // solo "Backend", sin DB todavía.
+        // Backend + su hijo ProductsController, sin DB todavía (T34).
+        Assert.Equal(2, firstGraph!.Nodes.Count);
+        Assert.Single(firstGraph.Nodes, n => n.Name == "Backend");
+        Assert.Single(firstGraph.Nodes, n => n.Name == "ProductsController");
 
         // Act: el repo "cambia" (ahora tiene DbContext) y se re-analiza.
         connector.Files = FixtureConDb;
@@ -117,7 +121,8 @@ public class ReanalyzeProjectTests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal(HttpStatusCode.OK, reanalyzeResp.StatusCode);
         var updatedGraph = await reanalyzeResp.Content.ReadFromJsonAsync<GraphResponse>();
 
-        Assert.Equal(2, updatedGraph!.Nodes.Count); // Backend + PostgreSQL, no duplicado.
+        // Backend + PostgreSQL + 3 hijos (Controller/Service/Repository, T34), no duplicado.
+        Assert.Equal(5, updatedGraph!.Nodes.Count);
         Assert.Single(updatedGraph.Nodes, n => n.Name == "Backend");
         Assert.Single(updatedGraph.Nodes, n => n.Name == "PostgreSQL");
         Assert.Single(updatedGraph.Edges);
@@ -125,7 +130,7 @@ public class ReanalyzeProjectTests : IClassFixture<CustomWebApplicationFactory>
         // El grafo persistido coincide con el de la respuesta (no quedó a medio reemplazar).
         var persistedGraph = await (await client.GetAsync($"/api/v1/projects/{created.Id}/graph"))
             .Content.ReadFromJsonAsync<GraphResponse>();
-        Assert.Equal(2, persistedGraph!.Nodes.Count);
+        Assert.Equal(5, persistedGraph!.Nodes.Count);
     }
 
     [Fact]

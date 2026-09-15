@@ -309,7 +309,400 @@ Decisiones tomadas con Carlos al arrancar la fase (interrogatorio previo a estos
 - Tests nuevos: `DockerAnalyzerTests` (5: `CanAnalyze` con Dockerfile/compose/ninguno, `Node` con `Source` correcto, prefiere Dockerfile sobre compose sin duplicar), `SystemGraphBuilderTests` (nuevo archivo, 1: Docker sin Backend detectado → nodo suelto sin edge, `SystemGraphBuilder` probado directo por ser función pura). `NodeExpressPipelineTests` extendido con `Dockerfile` real (mismo fixture que ya imita a `airbnb-finance-assistant`) para probar los 4 nodos + 3 edges end-to-end. Total backend: **128 tests** (69 domain + 28 api + 31 infra), verdes.
 - Estado final: **verificado en vivo por Carlos** contra `airbnb-finance-assistant` (tiene un `Dockerfile` real) — nodo Docker + edge Backend→Docker visibles y legibles tras el fix de layout.
 
-**TODO EL ROADMAP CONOCIDO (T1-T30) TERMINADO Y VERIFICADO EN VIVO.** No quedan tickets pendientes en `SDD/TASKS.md`.
+**ROADMAP ORIGINAL (T1-T30) TERMINADO Y VERIFICADO EN VIVO.** Ver Fase 6 más abajo para el trabajo nuevo.
+
+## Fase 6 — Analyzers de infraestructura ampliada (Security, Message Bus, Workers, Cloud)
+
+Objetivo: ampliar el "ancho" de lo que el pipeline de análisis detecta, más allá de
+Frontend/Backend/Database/Docker. Nace de comparar Stratalens contra Archify (proyecto de
+GitHub con la misma idea de fondo): su mapa muestra categorías que el nuestro no tiene
+(Security & Identity, Message Bus, Workers, Cloud Infrastructure). El objetivo NO es copiar
+su enfoque (ellos delegan la detección en un LLM narrando sobre una descripción de texto,
+sin analizador real) — es cerrar el gap real: nuestros analyzers usan compiladores/manifiestos
+reales (Roslyn, TS Compiler API, `package.json`), así que cada categoría nueva es un analyzer
+nuevo que seguirá esa misma barra de evidencia (regla de `RULES.md`: nunca un `Node`/`Edge`
+sin `Source`).
+
+Hallazgo de diseño (verificado leyendo `SystemGraphBuilder.cs` antes de planear el ticket):
+agregar un analyzer nuevo NO alcanza por sí solo. `SystemGraphBuilder.Build` es el único lugar
+que decide qué detalle fino de un analyzer se "promueve" a nodo visible en el mapa — el resto
+queda solo como evidencia (`Source`) de otro edge, nunca se dibuja (así es como Controllers/
+DbContext/PgPool ya funcionan hoy, línea 10 del archivo). Docker (T30) es visible porque tiene
+su propio bloque en `SystemGraphBuilder.Build` que lo promueve directo a nivel Sistema. Cada
+categoría nueva de esta fase necesita el mismo patrón: analyzer + bloque en `SystemGraphBuilder`.
+
+Orden decidido con Carlos: empezar por Security/Auth (la categoría que más le interesó del
+ejemplo de Archify). Message Bus, Workers y Cloud Infrastructure quedan como próximos tickets
+de esta misma fase, mismo patrón, uno a la vez — no se detallan todavía (regla de
+`INSTRUCTIONS.md`: este archivo se llena conforme avanza el proyecto, no de una sola vez).
+
+Decisiones tomadas con Carlos al arrancar la fase (interrogatorio previo a estos tickets):
+- Categoría de dominio: **nuevo valor `NodeCategory.Security`** (no reusar `External` — JWT
+  local no es un servicio de terceros, es una capacidad que vive dentro del propio backend;
+  modelarlo como `External` sería semánticamente incorrecto).
+- Alcance v1 del analyzer de auth: **solo JWT local** (`jsonwebtoken`/`passport-jwt` en Node,
+  `Microsoft.AspNetCore.Authentication.JwtBearer` en .NET). Identity providers de terceros
+  (Auth0, Okta, Firebase Auth) quedan fuera de v1 y son un ticket futuro aparte — mezclarlos
+  en el mismo ticket rompería la convención de "una tarea a la vez" (evidencia de dependencia
+  de código vs. evidencia de SDK de un proveedor externo son dos cosas distintas).
+
+### T31 — Domain: nuevo `NodeCategory.Security`
+- Depende de: T3
+- Descripción: agregar `Security` a `Domain/Enums/NodeCategory.cs` (comentario con ejemplos:
+  JWT, OAuth, Identity Provider — mismo estilo que los valores existentes). Mapear su color en
+  `frontend/src/graph/nodeVisuals.ts` (`CATEGORY_FALLBACK_COLORS`): necesita un tono propio,
+  no reusar el `github.attention` (amarillo) que ya usan Infrastructure/DevOps/Deployment —
+  reusarlo confundiría visualmente un nodo Security con un nodo Docker.
+- Criterio de aceptación: el enum compila con el valor nuevo; ningún analyzer lo usa todavía
+  (lo consume T32); `nodeVisuals.ts` tiene un color para `Security` que no choca con los
+  existentes (verificar contra la paleta de `theme/githubDark.ts`); `dotnet build` y
+  `npm run build`/`npm run lint` del frontend limpios.
+- Estado: done
+- `NodeCategory.Security` agregado al enum (Domain) con comentario de ejemplos (JWT/OAuth/
+  identidad DENTRO del backend, para distinguirlo de `External` que es terceros). Color nuevo:
+  token `sponsors` (`#db61a2`, el rosa REAL de Primer/GitHub Sponsors — no un hex inventado,
+  respeta la regla de `githubDark.ts`) agregado a la paleta y mapeado en
+  `nodeVisuals.ts.CATEGORY_FALLBACK_COLORS` (no en `TYPE_COLORS`: el Type concreto `"JWT"` lo
+  mapea T32 cuando exista el analyzer). Rosa elegido por ser el único distinto de los 5 en uso
+  (azul/morado/verde/amarillo/rojo-reservado) y por coincidir con el reddish-pink que Archify
+  usa para su caja "Security & Identity". Verificado: `dotnet build` 0/0; `npm run build` OK;
+  lint solo con los 6 warnings preexistentes (`set-state-in-effect`), ninguno nuevo.
+
+### T32 — Analyzer: detección de autenticación JWT (`AuthAnalyzer`)
+- Depende de: T31, T4, T10 (pipeline), extiende el patrón de T30 en `SystemGraphBuilder`
+- Descripción: `AuthAnalyzer` nuevo (`ILanguageAnalyzer`, `Language="auth"`) detecta JWT local
+  por dependencia real, nunca por convención de carpetas (regla de `RULES.md`, mismo criterio
+  que `NodeExpressAnalyzer.HasDependency` para `express`/`pg`):
+  - Node: `jsonwebtoken` o `passport-jwt` como dependencia en el `package.json` del backend
+    (reusar la resolución de "package.json más cercano" que ya tiene `NodeExpressAnalyzer` para
+    monorepos, no reimplementarla).
+  - .NET: `Microsoft.AspNetCore.Authentication.JwtBearer` como `PackageReference` dentro de un
+    `.csproj` — primera vez que un analyzer de C# lee contenido de `.csproj` en vez de solo
+    Roslyn; usar `connector.GetFileContentAsync` igual que Express, no agregar una dependencia
+    nueva para parsear XML si un check de substring alcanza.
+  - Produce un `Node(Category=Security, Type="JWT")` YA a nivel Sistema (igual que Docker en
+    T30 — sin detalle fino que agregar en el MVP).
+  - `SystemGraphBuilder.Build` gana un bloque nuevo (mismo shape que el bloque Docker, líneas
+    94-108 de hoy) que agrega el nodo Security si el analyzer lo detectó, más
+    `Edge Backend→Security` SOLO si hay Backend detectado (nunca inventar el otro extremo).
+- DECISIÓN PENDIENTE a resolver con Carlos al arrancar la tarea: label y `Confidence` exactos
+  del edge (ej. `"authenticates"` o `"protected by"`; Confidence — ¿90 como Docker, mismo
+  criterio de "evidencia directa de manifiesto", o distinto? se decide al empezar, no acá).
+- Criterio de aceptación: fixture Node con `jsonwebtoken` en `package.json` → aparece
+  `Node(Security, JWT)` + `Edge Backend→Security` con `Source` = ruta del `package.json`;
+  fixture .NET con `JwtBearer` en `.csproj` → mismo resultado con `Source` = ruta del `.csproj`;
+  repo sin ninguna de las dos dependencias → el nodo Security NO aparece (nunca inventar);
+  test en `SystemGraphBuilderTests` (mismo archivo de T30) para "Security sin Backend
+  detectado → nodo suelto sin edge".
+- Estado: done
+- DECISIÓN RESUELTA (con Carlos): label del edge = **"secured by"** (`"Backend secured by JWT"`,
+  se lee natural en la dirección de la flecha); Confidence = **90**, igual que Docker (misma
+  clase de evidencia: dependencia declarada en un manifiesto real, no inferencia sobre texto).
+- `AuthAnalyzer` nuevo (`Language="auth"`): mismo patrón de gate barato + confirmación por
+  contenido que `NodeExpressAnalyzer`. Detecta `jsonwebtoken`/`passport-jwt` en cualquier
+  `package.json` (JSON parse, deps o devDeps) o `Microsoft.AspNetCore.Authentication.JwtBearer`
+  en cualquier `.csproj` (substring — primer analyzer que lee `.csproj` como texto; parsear XML
+  sería sobre-ingeniería, el nombre del paquete es único). Excluye `node_modules/`. Entrega UN
+  `Node(Security, "JWT")` a nivel Sistema (binario "¿usa JWT?", como Docker).
+- **Desviación honesta del plan original del ticket:** el ticket sugería reusar la resolución
+  "package.json más cercano" de `NodeExpressAnalyzer`. Al implementarlo se vio que esa lógica
+  solo importa para atribuir el hallazgo a UN backend concreto entre varios — como el nodo es
+  binario a nivel Sistema, con la primera evidencia basta; reusarla habría acoplado dos
+  analyzers sin ganar corrección. Se recorren todos los manifiestos, primer match gana, Source
+  = ese manifiesto. Documentado en el código. Parse JSON envuelto en try/catch (a diferencia de
+  Express que lee un único package.json ya resuelto: acá se recorren varios, uno roto no debe
+  tumbar el análisis).
+- `SystemGraphBuilder.Build`: bloque nuevo calcado del de Docker (`resultsByLanguage["auth"]`
+  → promueve el nodo + edge `Backend→Security` "secured by" confidence 90 SOLO si hay Backend).
+  Constante `BackendToSecurityConfidence = 90`.
+- DI: `AuthAnalyzer` registrado como `ILanguageAnalyzer` en `AddInfrastructure`.
+- Frontend: `NodeCategory.Security` ya coloreado en T31; T32 agregó `JWT` a `TYPE_COLORS`
+  (`nodeVisuals.ts`, consistente con los otros Types reales) y `'Security'` a `CATEGORY_ORDER`
+  (`GraphTreePanel.tsx`, entre Database e Infrastructure). El layout (`computeLayers` en
+  `mapToReactFlow.ts`) es genérico por flechas, así que el nodo Security cae solo a la derecha
+  del Backend sin tocar el layout. `NodeDetailPanel` muestra "JWT" tal cual (fallback agnóstico
+  ya existente, sin cambio).
+- Tests: `AuthAnalyzerTests` (8: CanAnalyze package.json/csproj/ninguno; Analyze con
+  jsonwebtoken/passport-jwt/JwtBearer-csproj → nodo Security con Source correcto; sin auth →
+  vacío; monorepo → Source del manifiesto correcto), `SystemGraphBuilderTests` (+1: Security
+  sin Backend → nodo suelto sin edge), `NodeExpressPipelineTests` extendido (fixture con
+  `jsonwebtoken` real + `AuthAnalyzer` en la lista → 5 nodos + 4 edges end-to-end, verifica el
+  edge `secured by` con Source y Confidence 90). Total backend: **137 tests** (69 domain +
+  28 api + 40 infra), verdes. Frontend `npm run build`/`lint` limpios (solo warnings
+  preexistentes). **Verificado en vivo por Carlos** (2026-09-14) contra su repo real
+  `airbnb-finance-assistant` (monorepo con `jsonwebtoken ^9.0.3` en el `package.json` del
+  backend y sin auth en `client/`): el nodo rosa "JWT" (Category=Security) aparece a la
+  derecha del Backend con el edge `Backend→JWT` "secured by · 90% · inferido", sin falso
+  positivo en el frontend. Confirmado además autónomamente vía `gh api` que el repo real
+  declara esa dependencia (input idéntico al del pipeline test).
+
+## Fase 6 (profundidad) — Jerarquía de nodos (expand/collapse Backend → sus componentes)
+
+Objetivo: cerrar el OTRO gap con Archify, complementario al de los analyzers (ancho): la
+**profundidad**. Hoy el grafo es plano (`PRODUCT.md` línea 27: "el MVP solo muestra el nivel 2
+Application fijo"). Archify muestra sub-partes dentro de un componente (Security contiene Auth
+Service + JWT). Queremos lo mismo: expandir un nodo y ver los componentes que viven dentro.
+
+Diseño de datos (propuesto por Carlos, revisado y aprobado — Método Mixto Regla 1): patrón
+**Adjacency List** — un campo `ParentNodeId` nullable en `Node` (null = raíz como Backend; el
+id del padre = hijo como un Controller). Decisiones de modelado acordadas:
+- **Contención ≠ conexión:** la relación padre-hijo NO es un `Edge`. Los edges siguen siendo
+  conexiones de comportamiento (Backend→DB); la jerarquía es composición estructural, aparte.
+- **Máximo un padre por construcción:** un solo campo `ParentNodeId` lo garantiza (no se puede
+  guardar dos padres en un campo) — "estado inválido irrepresentable", no hay que validarlo.
+- **Invariante a validar:** un nodo no puede ser su propio padre (self-reference). Ciclos en
+  cadena (A→B→A) son casi imposibles en la práctica porque el builder asigna padres de arriba
+  hacia abajo, pero la invariante de self-reference se guarda igual.
+
+Piloto elegido con Carlos: **Backend → sus Controllers/Services** (no Security → Auth Service/
+JWT todavía). Razón: `CSharpAnalyzer`/`NodeExpressAnalyzer` YA detectan Controllers/Services
+(Category=Code) pero `SystemGraphBuilder` hoy los DESCARTA (los usa solo como evidencia, líneas
+10 y 65-70 de `NodeExpressAnalyzer.cs`). Estrenamos toda la plomería de jerarquía (schema +
+builder + render anidado) reusando detección existente, sin analyzer nuevo — mínimo riesgo.
+Security-con-hijos y otras contenciones quedan de follow-up una vez probada la plomería.
+
+### T33 — Domain + persistencia + contrato API: `Node.ParentNodeId` (fundación)
+- Depende de: T3
+- Descripción: agregar `ParentNodeId` (`Guid?`, nullable) a `Node` (Domain) con invariante de
+  self-reference (un nodo no puede declararse su propio padre) — patrón del constructor
+  validador que ya usa `Node`. EF: columna nullable en `NodeConfiguration` + migración (DECISIÓN
+  PENDIENTE al arrancar: ¿FK self-referencial real con `OnDelete` explícito, o columna `Guid?`
+  simple sin constraint de FK para evitar complejidad de cascada? — empezar por lo más simple
+  que sea correcto). Exponer `ParentNodeId` (nullable) en `GraphNodeDto` (`ProjectContracts.cs`)
+  + su mapeo, y en el tipo `GraphNode` del frontend (`graph/types.ts`, `parentNodeId?: string |
+  null`). SIN cambio de comportamiento: nada asigna padre todavía (todos null) — fundación pura,
+  como fue T31.
+- Criterio de aceptación: unit test de la invariante (self-parent rechazado) + los casos válidos
+  (padre null y padre = otro id); migración aplica limpio contra Postgres; los 137 tests
+  existentes siguen pasando; el endpoint del grafo devuelve `parentNodeId` (null para todos hoy);
+  `dotnet build` y `npm run build`/`lint` limpios.
+- Estado: done
+- DECISIÓN RESUELTA (con Carlos): **columna `Guid?` simple, sin FK** self-referencial. La
+  integridad la da el agregado (el grafo se guarda/borra como unidad atómica por proyecto en
+  `SaveGraphAsync`); una FK real chocaría con el `ExecuteDeleteAsync` masivo (Postgres verifica
+  integridad por fila → borrar padre e hijos en un statement violaría la FK a mitad de camino).
+- HALLAZGO al implementar (Modo Enseñanza, ajuste honesto del criterio): la invariante
+  "self-parent rechazado" resultó **imposible de violar por construcción** — `Node` genera su
+  `Id` DENTRO del ctor con `Guid.NewGuid()`, así que nadie puede pasar un `ParentNodeId` igual a
+  un `Id` que aún no existe. Un `if (parentNodeId == Id) throw` sería código muerto e
+  intesteable. Se documentó el porqué en `Node.cs` y los tests cubren lo que SÍ es real: raíz
+  (padre null) e hijo (padre = id de otro nodo). Los ciclos A→B→A no son chequeables a nivel de
+  un nodo suelto; los previene el builder (T34).
+- `Node.ParentNodeId` (`Guid?`) agregado como parámetro opcional AL FINAL del ctor → todos los
+  call sites existentes siguen compilando (caen a null = raíz). EF: `builder.Property(n =>
+  n.ParentNodeId)` en `NodeConfiguration`, sin `HasOne`/FK. Migración `AddNodeParentNodeId`
+  (solo `AddColumn<Guid> nullable uuid`, verificada antes de aplicar) aplicada limpio contra
+  Postgres. `GraphNodeDto` + su único mapeo en `ProjectsController.ToDto` exponen `ParentNodeId`
+  (nullable). Frontend `GraphNode` ganó `parentNodeId?: string | null` (opcional → demoGraph y
+  el resto no rompen). SIN comportamiento nuevo: todos los nodos tienen padre null hoy (nada lo
+  asigna hasta T34).
+- Tests: `NodeTests` +2 (raíz con padre null; hijo guarda el id del padre). Total backend: **139
+  tests** (71 domain + 28 api + 40 infra), verdes. Frontend `npm run build`/`lint` limpios (solo
+  warnings preexistentes). Nota operativa: `dotnet ef` usa `DesignTimeDbContextFactory` con
+  `--startup-project src/Stratalens.Infrastructure` (el paquete Design vive ahí, no en Api); para
+  `database update` se exporta `ConnectionStrings__DefaultConnection` desde `.env`.
+
+### T34 — Application: `SystemGraphBuilder` expone los hijos del Backend
+- Depende de: T33, T10 (pipeline)
+- Descripción: hoy `SystemGraphBuilder` descarta los nodos finos (Controllers/Services) que
+  producen los analyzers. Cambiar para que los Controllers/Services detectados se PERSISTAN como
+  hijos del nodo Backend (`ParentNodeId = backend.Id`), sin dejar de construir el nodo Backend
+  grueso como hoy. Los marcadores de DB (DbContext/PgPool) NO son hijos del Backend (son
+  evidencia del nodo PostgreSQL) — se siguen descartando como detalle. DECISIONES PENDIENTES al
+  arrancar: (1) estabilidad de Id — `Node` es inmutable; para setear el padre en un nodo que ya
+  creó el analyzer, ¿el builder recrea el hijo (Id nuevo) o se agrega un factory que preserve el
+  Id? (afecta si algún día se quieren los edges entre hijos); (2) los edges inter-hijos (DI de
+  `CSharpAnalyzer`) NO se surfacean en este ticket — solo el anidamiento; edges de detalle son
+  follow-up.
+- Criterio de aceptación: pipeline test — un repo con 2 controllers → el grafo tiene el Backend
+  + 2 nodos hijos con `ParentNodeId = backend.Id`; los nodos gruesos (Frontend/DB/Docker/JWT) no
+  cambian; los hijos no se duplican; un repo sin controllers detectados → Backend sin hijos (no
+  inventar).
+- Estado: done
+- DECISIÓN RESUELTA (con Carlos): **recrear el hijo con Id nuevo** (no factory que preserve Id).
+  El builder crea un `Node` nuevo copiando Name/Type/Category/Metadata del que detectó el
+  analyzer, con `parentNodeId = backend.Id`. Suficiente porque T34 NO surfacea edges entre hijos
+  (lo único que necesitaría Ids estables); el análisis es idempotente (regenera todo cada vez),
+  así que recrear no tiene coste de datos. Además "quién es hijo de quién" es decisión del
+  builder (Application), su capa correcta.
+- Implementación en `SystemGraphBuilder.BuildBackend`: su tupla de retorno ganó un tercer
+  miembro `IReadOnlyList<Node> Children` = los nodos finos del analyzer EXCEPTO el marcador de
+  DB (`result.Nodes.Where(n => n.Type != dbMarkerType)`), re-emitidos con `parentNodeId =
+  backend.Id`. El marcador de DB (DbContext/PgPool) queda excluido a propósito (es evidencia del
+  nodo PostgreSQL, no un componente interno). `Build` agrega los hijos con `nodes.AddRange`
+  (rama sin backend → `Array.Empty<Node>()`). Los edges NO cambian (sin edges entre hijos en
+  este ticket).
+- Tests: `SystemGraphBuilderTests` +1 (backend con Controller+DbContext → Controller cuelga del
+  Backend con ParentNodeId, DbContext excluido/→PostgreSQL). Tres tests existentes que asertaban
+  conteos exactos se actualizaron porque el comportamiento cambió A PROPÓSITO (los hijos ahora
+  son parte del grafo), no por bug: `AnalyzeRepositoryPipelineTests` (3→6 nodos: +3 hijos
+  Controller/Service/Repository del fixture C#), `NodeExpressPipelineTests` (5→7: +2 controllers
+  del fixture Express) y `ReanalyzeProjectTests` (V1 1→2 con el hijo; V2 2→5 con los 3 hijos).
+  Total backend: **140 tests** (71 domain + 28 api + 41 infra), verdes.
+- NOTA visual: tras T34 los hijos ya viajan en el grafo pero el frontend aún NO los anida
+  (mapToReactFlow no mapea parentNodeId → parentId hasta T35), así que renderizarían PLANOS y
+  sin edges. Por eso NO se relanzó la app entre T34 y T35 — la verificación en vivo se hace al
+  cerrar T35.
+
+### T35 — Frontend: render anidado + expand/collapse
+- Depende de: T34, T12
+- Descripción: `mapToReactFlow` emite `parentId` + `extent:'parent'` para los nodos hijos y los
+  posiciona relativos al padre (feature nativa de React Flow: sub-flows). Expand/collapse:
+  clicar el nodo padre alterna la visibilidad de sus hijos. DECISIONES PENDIENTES al arrancar:
+  (1) UX por defecto — ¿colapsado con un badge de conteo ("+3") como Archify, o expandido?;
+  (2) cómo dimensionar el nodo contenedor para envolver a los hijos al expandir. Distinguir
+  visualmente "contiene" (anidamiento) de los edges de conexión — la contención NO es una flecha.
+- Criterio de aceptación: con el grafo de un repo con controllers, el Backend se ve expandible;
+  expandir revela los Controllers/Services anidados dentro; colapsar los oculta; los edges
+  gruesos (Frontend→Backend, Backend→DB, etc.) siguen renderizando bien.
+- Estado: done, verificado en vivo por Carlos (2026-09-14) contra `airbnb-finance-assistant`
+  (13 controllers/routes → badge `⊕ 13`, expand a grid de chips, colapsar OK).
+- DECISIONES RESUELTAS (con Carlos): (1) render = **contención real** (React Flow sub-flows:
+  el Backend se vuelve un contenedor y los hijos viven dentro vía `parentId`+`extent:'parent'`);
+  (2) default = **colapsado con badge `⊕ N`** (overview a nivel Sistema primero).
+- Implementación: `mapToReactFlow` parte los nodos en raíces (layout izq→der) e hijos (dentro
+  del padre); solo emite hijos si el padre está expandido; solo edges entre nodos visibles.
+  Estado de expansión en `GraphCanvas` (`Set` de ids, `useCallback` estable). Nodos nuevos:
+  `ContainerNode` (Backend expandido: caja con header + chip `⊖`) y `ComponentChip` (hijo
+  minimalista: punto + nombre). `TerminalNode` ganó el chip `⊕ N` (con `stopPropagation` para
+  no disparar la selección). Registrados los 3 tipos en `nodeTypes`.
+- AJUSTES tras la 1ª verificación visual de Carlos (dos hallazgos con screenshot):
+  - **Hijos compactos:** 13 tarjetas apiladas parecían una lista enorme → los hijos pasaron de
+    `TerminalNode` completo a `ComponentChip` compacto en un **grid** de hasta `GRID_COLS=3`
+    columnas (estilo Archify). El contenedor se dimensiona al grid.
+  - **Overlap al expandir:** el contenedor ancho (~498px > el `LAYER_WIDTH` fijo de 400) se
+    encimaba con PostgreSQL/Docker. Fix: layout **SIZE-AWARE** — la X de cada capa parte del
+    ancho REAL de la capa anterior (`maxWidthByLayer` acumulado + `H_GAP`) y dentro de una capa
+    los nodos se apilan por su alto real (`yCursorByLayer` + `V_GAP`); se eliminaron
+    `LAYER_WIDTH`/`ROW_HEIGHT` fijos. Un contenedor ancho ahora empuja las capas siguientes a la
+    derecha sin solaparse.
+- AJUSTE de modelado (con Carlos, afecta también a T32): la dirección del edge de seguridad se
+  invirtió a **Security→Backend "validates"** (antes Backend→Security "secured by"). Sigue la
+  narrativa de arquitectura de Archify ("Validate Token"): la seguridad se ubica del lado de
+  ENTRADA y valida las requests hacia el backend, en vez de leerse como dependencia de librería.
+  Confidence 90 sin cambio. `SystemGraphBuilder` + `NodeExpressPipelineTests` actualizados.
+- DECISIÓN DE PRODUCTO (con Carlos): Carlos pidió `Frontend→Security→Backend` (seguridad en el
+  camino de la request). Se **rechazó dibujar `Frontend→Security`** porque NO hay evidencia real
+  de que el frontend hable con la auth (la única fuente del nodo JWT es el `package.json` del
+  backend) — hacerlo violaría la regla dura de `RULES.md` ("nunca un edge sin Source, nunca
+  inventar"), el diferenciador central del producto vs Archify. Alternativa honesta anotada para
+  el futuro: un ticket que enseñe al analyzer de frontend a detectar evidencia REAL de auth (un
+  `apiCall` a `/login`/`/auth`, o una librería tipo `@auth0/auth0-react`); solo entonces el edge
+  `Frontend→Security` sería legítimo, con ese archivo como Source.
+- Verificado autónomamente: backend **140 tests** verdes; frontend `tsc --noEmit`/`build`/`lint`
+  limpios (solo warnings preexistentes).
+
+**FASE 6 (ancho + profundidad): T31-T35 done.** Ancho = analyzer de Security/JWT (T31-T32).
+Profundidad = jerarquía de nodos con expand/collapse (T33-T35). Front→security con evidencia
+real queda como posible ticket futuro. Siguen los analyzers de ancho (T36 Message Bus abajo;
+Workers/Cloud como follow-up del mismo patrón).
+
+### T36 — Analyzer: detección de Message Bus (`MessageBusAnalyzer`)
+- Depende de: T4, T10 (pipeline), extiende el patrón de T30/T32 en `SystemGraphBuilder`
+- Descripción: `MessageBusAnalyzer` nuevo (`ILanguageAnalyzer`, `Language="messagebus"`) detecta
+  un broker de mensajería por dependencia REAL en el manifiesto (mismo criterio que
+  `AuthAnalyzer`, nunca por convención): npm `amqplib`/`amqp-connection-manager`→RabbitMQ,
+  `kafkajs`→Kafka, `nats`→NATS; .NET `RabbitMQ.Client`→RabbitMQ, `Confluent.Kafka`→Kafka,
+  `MassTransit`→"Message Bus" (genérico, agnóstico al broker). Produce un
+  `Node(Category=Infrastructure, Type="MessageBus", Name=broker)` — NO necesita categoría nueva:
+  `NodeCategory.Infrastructure` ya lista "Queue". `SystemGraphBuilder` gana un bloque nuevo
+  (mismo shape que Docker/Security) que agrega el nodo + edge `Backend→MessageBus` ("messaging",
+  Confidence 90) SOLO si hay Backend.
+- DECISIONES (con Carlos): Name = **broker específico** (fallback "Message Bus" para libs
+  agnósticas); edge label = **"messaging"** (neutral: una dependencia prueba que el backend USA
+  el bus, no si publica o consume — no afirmar más que la evidencia); Confidence 90 (evidencia
+  de manifiesto, como Docker/Security). Color propio distinto del amarillo de Docker.
+- Cómo se construye/verifica SIN un repo real (pregunta de Carlos): igual que todos los
+  analyzers previos — con **fixtures en memoria** en los tests (un `package.json`/`.csproj` de
+  mentira con la dependencia). Verificación en vivo (opcional, después) requiere un repo propio
+  con la dep (el selector solo lista repos `affiliation=owner`, T25).
+- Criterio de aceptación: fixture con `amqplib` → `Node(Infrastructure, MessageBus, "RabbitMQ")`
+  + `Edge Backend→MessageBus "messaging"` con Source = ruta del manifiesto; fixture con
+  `Confluent.Kafka` en `.csproj` → broker "Kafka"; sin ninguna dep de bus → nodo NO aparece
+  (nunca inventar); test en `SystemGraphBuilderTests` (bus sin Backend → nodo suelto sin edge).
+- Estado: done (verificado por fixtures; verificación en vivo pendiente hasta que Carlos tenga
+  un repo propio con un broker — agregar `amqplib`/`kafkajs` a un `package.json` y re-analizar).
+- `MessageBusAnalyzer` (gemelo de `AuthAnalyzer`): recorre manifiestos, mapea la dep a su broker
+  vía listas ORDENADAS de tuplas (npm: amqplib/amqp-connection-manager→RabbitMQ, kafkajs→Kafka,
+  nats→NATS; .NET: RabbitMQ.Client→RabbitMQ, Confluent.Kafka→Kafka, MassTransit→"Message Bus" al
+  final por ser agnóstico). Primer manifiesto con broker gana. `Node(Infrastructure, "MessageBus",
+  Name=broker)`. Try/catch en el parse JSON (varios manifiestos, uno roto no tumba el análisis).
+- `SystemGraphBuilder`: bloque nuevo calcado de Docker/Security → nodo + `Edge Backend→MessageBus`
+  "messaging" (confidence 90) solo si hay Backend. Constante `BackendToMessageBusConfidence=90`.
+- DI: `MessageBusAnalyzer` registrado. Frontend: token `severe` (#db6d28, naranja real de Primer)
+  en `githubDark.ts` + `TYPE_COLORS["MessageBus"]` en `nodeVisuals.ts` (distinto del amarillo de
+  Docker) + `TECH_LABELS["MessageBus"]="Message Bus"` en `NodeDetailPanel`. Sin categoría nueva:
+  `NodeCategory.Infrastructure` ya cubre "Queue", así que agrupa bajo Infrastructure en el árbol.
+- Tests: `MessageBusAnalyzerTests` (9: CanAnalyze; amqplib→RabbitMQ, kafkajs→Kafka, Confluent.
+  Kafka-csproj→Kafka, MassTransit→genérico, sin dep→vacío, monorepo Source correcto),
+  `SystemGraphBuilderTests` (+1: bus sin Backend → nodo suelto), `NodeExpressPipelineTests`
+  extendido (fixture +amqplib +`MessageBusAnalyzer` en la lista → 8 nodos + 5 edges end-to-end,
+  verifica `Backend→RabbitMQ "messaging"`). GOTCHA registrado: el pipeline test arma su PROPIA
+  lista de analyzers, así que hubo que agregar `new MessageBusAnalyzer()` ahí (no basta con la
+  fixture) — el primer run falló (7 vs 8 esperado) justo por eso. Total backend: **149 tests**
+  (71 domain + 28 api + 50 infra), verdes. Frontend `tsc`/build/lint limpios.
+
+### T37 — Analyzer: detección de Workers / background jobs (`WorkersAnalyzer`)
+- Depende de: T4, T10, extiende el patrón de T36 en `SystemGraphBuilder`
+- Descripción: `WorkersAnalyzer` (`Language="workers"`) detecta procesamiento en background por
+  dependencia de una librería DEDICADA de jobs (nunca por convención — Carlos marcó Workers como
+  el más ambiguo, alto riesgo de falso positivo): npm `bullmq`/`bull`/`bee-queue`/`agenda`; .NET
+  `Hangfire`/`Quartz`/`Coravel`. Se excluyen a propósito los cron triviales (node-cron). Produce
+  `Node(Category=Worker, Name="Workers", Type="Workers")` con la lib concreta en
+  `metadata["framework"]`. `SystemGraphBuilder`: nodo + `Edge Backend→Workers "background jobs"`
+  (confidence 90) solo si hay Backend.
+- DECISIONES (con Carlos): categoría = **nuevo `NodeCategory.Worker`** (rol arquitectónico
+  distinto, Archify lo separa; sin migración, Category es varchar — igual que Security en T31);
+  nombre = **genérico "Workers"** (el insight es "hay background processing", no cuál lib; la lib
+  va en metadata); edge label = **"background jobs"** (neutral). Color = teal `#39c5cf` (token
+  `teal` nuevo, distinto de los 6 en uso).
+- Criterio de aceptación: fixture con `bullmq` → `Node(Worker, "Workers", framework=BullMQ)` +
+  `Edge Backend→Workers`; `Hangfire` en `.csproj` → framework=Hangfire; `node-cron` (cron
+  trivial) → NADA (no inventar); test en `SystemGraphBuilderTests` (workers sin Backend → suelto).
+- Estado: done (verificado por fixtures; en vivo requiere repo propio con la dep).
+- `WorkersAnalyzer` gemelo de `MessageBusAnalyzer` pero el Node siempre se llama "Workers" y la
+  lib va en `metadata["framework"]` (listas ordenadas de tuplas package→framework). Bloque en
+  `SystemGraphBuilder` calcado. DI registrado. Frontend: token `teal` (#39c5cf) + `TYPE_COLORS
+  ["Workers"]` + `CATEGORY_ORDER` con `'Worker'` (entre Infrastructure y DevOps) + `META_LABELS
+  ["framework"]="Framework"` en `NodeDetailPanel`. Tests: `WorkersAnalyzerTests` (6),
+  `SystemGraphBuilderTests` (+1), `NodeExpressPipelineTests` extendido (fixture +bullmq +
+  `WorkersAnalyzer` en la lista → 9 nodos + 6 edges; se recordó agregar el analyzer a la lista,
+  el gotcha de T36). Total backend: **156 tests** (71 domain + 28 api + 57 infra), verdes.
+  Frontend `tsc`/build/lint limpios.
+
+### T38 — Analyzer: detección de Cloud provider (`CloudAnalyzer`)
+- Depende de: T4, T10, extiende el patrón de T36/T37 en `SystemGraphBuilder`. Último del patrón.
+- Descripción: `CloudAnalyzer` (`Language="cloud"`) detecta que la app USA un cloud por el SDK del
+  proveedor en el manifiesto, y nombra el nodo por el proveedor (AWS/Azure/GCP). DIFERENCIA con
+  los otros analyzers npm: los SDK de cloud son paquetes con PREFIJO (`@aws-sdk/client-s3`,
+  `@google-cloud/storage`, `@azure/...`), así que la detección npm recorre las claves de deps y
+  matchea por prefijo (`aws-sdk` exacto o `@aws-sdk/` prefijo → AWS; `@google-cloud/` → GCP;
+  `@azure/` → Azure), con prioridad fija (AWS, GCP, Azure) para ser determinista. .NET: substring
+  de prefijo NuGet (`AWSSDK.`→AWS, `Google.Cloud.`→GCP, `Azure.`→Azure, este último al final por
+  ser el más amplio). `Node(Category=Deployment, Name=proveedor, Type="Cloud")`. `SystemGraphBuilder`:
+  nodo + `Edge Backend→Cloud "cloud services"` (confidence 90) solo si hay Backend.
+- DECISIONES (con Carlos): evidencia = **SDK del proveedor** (manifiesto), no Terraform/IaC (que
+  detecta "provisiona infra" en vez de "usa cloud"; queda como posible extensión futura). Categoría
+  = **reusar `NodeCategory.Deployment`** (el enum ya lista AWS/Azure/GCP ahí — sin enum nuevo, como
+  Message Bus reusó Infrastructure). Color = sky-blue `#79c0ff` (token `sky`, tema "nube"; más
+  claro que el accent del Frontend). Edge label = **"cloud services"** (neutral: el SDK prueba uso).
+- Criterio de aceptación: fixture con `@aws-sdk/client-s3` → `Node(Deployment, "AWS", Cloud)` +
+  `Edge Backend→Cloud`; `aws-sdk` v2 (nombre exacto) también → AWS; `@google-cloud/storage` → GCP;
+  `Azure.Storage.Blobs` en `.csproj` → Azure; sin SDK → NADA (no inventar); test en
+  `SystemGraphBuilderTests` (cloud sin Backend → suelto).
+- Estado: done (verificado por fixtures; en vivo requiere repo propio con la dep).
+- Tests: `CloudAnalyzerTests` (7: incluye el caso del prefijo `@aws-sdk/` y el exacto `aws-sdk`),
+  `SystemGraphBuilderTests` (+1), `NodeExpressPipelineTests` extendido (+`@aws-sdk/client-s3` +
+  `CloudAnalyzer` en la lista → 10 nodos + 7 edges). DI + frontend (token `sky` + `TYPE_COLORS
+  ["Cloud"]`; agrupa bajo "Deployment" en el árbol, ya en `CATEGORY_ORDER`). Total backend: **164
+  tests** (71 domain + 28 api + 65 infra), verdes. Frontend `tsc`/build/lint limpios.
+
+**FASE 6 COMPLETA (ancho + profundidad). Ancho = 4 categorías nuevas de detección:** Security/JWT
+(T32, rosa), Message Bus/RabbitMQ-Kafka (T36, naranja), Workers/background-jobs (T37, teal), Cloud/
+AWS-Azure-GCP (T38, sky). **Profundidad** = jerarquía de nodos con expand/collapse (T33-T35).
+Todas por dependencia de manifiesto real, confidence 90, nunca inventadas. Posibles follow-ups
+futuros del mismo patrón: Terraform/IaC para cloud, front→security con evidencia real, más brokers/
+frameworks/providers, y sub-detección fina (ej. qué recursos cloud concretos, como hace Archify).
 
 - DECISIÓN D1 (T23, nota histórica mal ubicada en este archivo): el timeline lee de `GET /projects/{id}/traces` (tiene startedAt→offsets reales); el traceId del último evento LIVE actúa de refreshKey → refetch al llegar un trace en vivo. Sin cambios en backend. Archivos (todo frontend): `live/traceTypes.ts` (TraceDto/SpanDto), `services/traceService.ts`, `hooks/useProjectTraces.ts` (fetch+refetch), `components/TraceTimeline.tsx` (waterfall: left%=offset, width%=duración; raíz morada, hijo teal; ms fuera de la barra), `GraphPage.tsx` (monta el panel dockeado abajo). VERIFICADO end-to-end: waterfall proporcional (raíz backend ancho completo, hijo DB tramo desplazado) + total + refresco en vivo sin recargar. Bug de layout corregido en verificación: la etiqueta de ms iba dentro de la barra y desbordaba en spans cortos → se sacó fuera + `overflow:hidden` en el track + width clamp a (100-left%).
 

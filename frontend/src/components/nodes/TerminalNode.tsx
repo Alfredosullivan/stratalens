@@ -13,11 +13,15 @@ type TerminalNodeType = Node<GraphFlowNodeData, 'terminal'>;
 // computeLayers es estrictamente izquierda→derecha, así que las conexiones deben entrar
 // y salir por los lados para seguir el flujo visual del grafo.
 export function TerminalNode({ data }: NodeProps<TerminalNodeType>) {
-  const { graphNode, color } = data;
+  const { graphNode, color, hasChildren, childCount, isExpanded, onToggleExpand } = data;
 
   // La barra superior muestra el origen de detección (mismo dato que ya ve el usuario en
   // el panel de detalle, T13) — nunca texto inventado. Sin metadata.source, cae al Type.
   const path = graphNode.metadata.source ?? graphNode.type;
+
+  // Chip de expandir (T35): solo si el nodo tiene hijos y está colapsado. stopPropagation
+  // evita que el click de expandir dispare también onNodeClick (selección/panel de detalle).
+  const showExpandChip = hasChildren && !isExpanded;
 
   return (
     <div style={{ ...styles.card, borderColor: color, boxShadow: `0 0 14px -2px ${color}` }}>
@@ -34,6 +38,20 @@ export function TerminalNode({ data }: NodeProps<TerminalNodeType>) {
         <div style={styles.name}>{graphNode.name}</div>
         <div style={{ ...styles.tech, color }}>{graphNode.type}</div>
         <div style={styles.category}>{graphNode.category}</div>
+
+        {showExpandChip && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpand?.(graphNode.id);
+            }}
+            style={{ ...styles.expandChip, borderColor: color, color }}
+            title={`Ver ${childCount} componentes internos`}
+          >
+            ⊕ {childCount}
+          </button>
+        )}
       </div>
 
       <Handle type="source" position={Position.Right} style={{ ...styles.handle, background: color }} />
@@ -74,4 +92,15 @@ const styles: Record<string, React.CSSProperties> = {
   name: { fontSize: 14, fontWeight: 700 },
   tech: { fontSize: 11.5, marginTop: 2, fontWeight: 600 },
   category: { fontSize: 10, color: github.fgMuted, marginTop: 7 },
+  expandChip: {
+    marginTop: 9,
+    padding: '2px 9px',
+    background: 'transparent',
+    border: '1px solid',
+    borderRadius: 20,
+    fontFamily: 'inherit',
+    fontSize: 11,
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
 };

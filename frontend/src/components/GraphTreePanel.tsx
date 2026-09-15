@@ -16,7 +16,7 @@ interface GraphTreePanelProps {
 
 // Orden de categorías: stack principal primero, soporte/infra después. Cualquier
 // categoría no listada (futuras) cae al final, en vez de desaparecer.
-const CATEGORY_ORDER = ['Application', 'Database', 'Infrastructure', 'DevOps', 'Deployment', 'External', 'Code'];
+const CATEGORY_ORDER = ['Application', 'Database', 'Security', 'Infrastructure', 'Worker', 'DevOps', 'Deployment', 'External', 'Code'];
 
 // Panel-árbol lateral (dirección visual post-Fase 4, variante B del mockup): navegación
 // estilo file-explorer de los nodos YA existentes en el grafo, agrupados por Category.

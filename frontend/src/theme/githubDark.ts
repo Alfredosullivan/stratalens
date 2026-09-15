@@ -17,5 +17,9 @@ export const github = {
   done: '#a371f7',      // Backend (AspNetCore)
   success: '#3fb950',   // Database (PostgreSQL) + edges runtime confirmados
   attention: '#d29922', // Infraestructura/DevOps/Docker + resalte de trace en vivo
+  sponsors: '#db61a2',  // Security (JWT/auth): rosa distinto de los 5 anteriores, no choca
+  severe: '#db6d28',    // Message Bus (RabbitMQ/Kafka): naranja, distinto del amarillo Docker
+  teal: '#39c5cf',      // Workers (background jobs): teal, distinto de los 6 anteriores
+  sky: '#79c0ff',       // Cloud (AWS/Azure/GCP): azul cielo, más claro que el accent del Frontend
   danger: '#f85149',    // reservado: futuro estado ERROR de un trace (no usado todavía)
 } as const;
