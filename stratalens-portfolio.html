@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stratalens — Visualizador de arquitectura full-stack + observabilidad</title>
+<style>
+  :root{
+    --bg:#070a12; --bg2:#0d1320; --card:#111828; --line:#1e293f;
+    --ink:#e8eefb; --muted:#8ea3c9;
+    --blue:#58a6ff; --violet:#a371f7; --green:#3fb950; --pink:#db61a2;
+    --orange:#db6d28; --teal:#39c5cf; --amber:#ffb454; --red:#ff6b81;
+    --grad:linear-gradient(120deg,#58a6ff,#a371f7,#db61a2);
+    --grad2:linear-gradient(120deg,#39c5cf,#58a6ff);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.62}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+  section{padding:62px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:1.95rem;margin-bottom:8px;letter-spacing:-.5px;color:#fff}
+  h2 .num{font-family:'Consolas',monospace;color:var(--teal);font-size:.95rem;display:block;margin-bottom:4px;opacity:.85}
+  h3{font-size:1.14rem;margin:22px 0 8px;color:#fff}
+  p{color:var(--muted);margin-bottom:10px}
+  code{font-family:'Consolas',monospace;background:#0b1424;color:var(--teal);padding:2px 6px;border-radius:5px;font-size:.85em}
+  b{color:#dbe6fb}
+  .lead{font-size:1.06rem;color:#c3cfe6}
+  /* HERO */
+  .hero{background:
+    radial-gradient(1100px 480px at 15% -10%,rgba(163,113,247,.20),transparent),
+    radial-gradient(900px 460px at 92% -5%,rgba(88,166,255,.16),transparent),
+    radial-gradient(700px 420px at 60% 110%,rgba(219,97,162,.12),transparent),var(--bg);
+    padding:92px 0 70px;border-bottom:1px solid var(--line)}
+  .badge{display:inline-block;font-family:'Consolas',monospace;font-size:.76rem;color:var(--teal);
+    border:1px solid var(--line);border-radius:999px;padding:6px 14px;margin-bottom:22px;background:var(--bg2)}
+  .hero h1{font-size:3.15rem;line-height:1.04;letter-spacing:-1.6px;margin-bottom:16px}
+  .hero h1 span{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .hero p{font-size:1.16rem;max-width:700px}
+  .spectrum{display:flex;gap:6px;margin:26px 0 4px}
+  .spectrum i{height:6px;flex:1;border-radius:3px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:38px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .stat .n{font-size:2rem;font-weight:700;background:var(--grad2);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .stat .l{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  /* GRID */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px}
+  .card h3{margin-top:0;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .tag{font-family:'Consolas',monospace;font-size:.7rem;padding:3px 8px;border-radius:6px;background:var(--bg2);color:var(--teal);border:1px solid var(--line)}
+  .why{border-left:3px solid var(--violet);padding-left:14px;margin-top:10px}
+  .why b{color:#fff}
+  .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .pill{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:.85rem;color:#cdd8ee}
+  .pill b{color:var(--teal)}
+  /* DETECTORS */
+  .dets{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px}
+  .det{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;border-top:3px solid}
+  .det .name{font-weight:700;color:#fff;font-size:.98rem}
+  .det .ev{font-family:'Consolas',monospace;font-size:.72rem;color:var(--muted);margin-top:5px;line-height:1.4}
+  /* DIAGRAM */
+  pre.diagram{background:#060a14;border:1px solid var(--line);border-radius:14px;padding:22px;overflow-x:auto;
+    font-family:'Consolas',monospace;font-size:.82rem;color:#b9c6e2;line-height:1.55;margin-top:16px}
+  .flow{color:var(--teal)} .lbl{color:var(--amber)} .cmt{color:#5b6b8c} .hl{color:var(--pink)}
+  /* BUGS */
+  .bug{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--amber);border-radius:12px;padding:20px;margin-top:16px}
+  .bug h3{margin-top:0}
+  .bug .meta{font-family:'Consolas',monospace;font-size:.73rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+  .bug .fix{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}
+  .bug .fix b{color:var(--green)}
+  /* QA */
+  .qa{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin-top:14px}
+  .qa summary{cursor:pointer;font-weight:600;color:#fff;font-size:1.02rem;list-style:none}
+  .qa summary::before{content:"▸ ";color:var(--teal)}
+  .qa[open] summary::before{content:"▾ "}
+  .qa p{margin-top:12px}
+  .qa .model{border-left:3px solid var(--green);padding-left:14px;margin-top:10px;color:#c3cfe6}
+  footer{padding:44px 0;text-align:center;color:var(--muted);font-size:.9rem}
+  footer b{color:var(--ink)}
+  @media(max-width:760px){.grid2,.dets{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.dets{grid-template-columns:1fr 1fr}.hero h1{font-size:2.2rem}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge">STRATALENS · FULL-STACK ARCHITECTURE + OBSERVABILITY</span>
+    <h1>Del repositorio a un <span>mapa de arquitectura vivo</span>, sin adivinar nada.</h1>
+    <p class="lead">Stratalens conecta un repo de GitHub, lo analiza con <b>compiladores reales</b> (Roslyn, TS Compiler API) y dibuja cómo están conectadas sus piezas — Frontend, Backend, base de datos, seguridad, mensajería, workers, cloud — con <b>trazabilidad y nivel de confianza en cada relación</b>. Y cuando llega una request real, el mapa <b>reacciona en vivo</b>.</p>
+    <div class="spectrum">
+      <i style="background:#58a6ff"></i><i style="background:#a371f7"></i><i style="background:#3fb950"></i>
+      <i style="background:#db61a2"></i><i style="background:#db6d28"></i><i style="background:#39c5cf"></i><i style="background:#79c0ff"></i>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="n">7</div><div class="l">Fases (0→6)</div></div>
+      <div class="stat"><div class="n">164</div><div class="l">Tests backend verdes</div></div>
+      <div class="stat"><div class="n">8</div><div class="l">Analyzers de detección</div></div>
+      <div class="stat"><div class="n">4</div><div class="l">Capas Clean Arch.</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- 01 OVERVIEW -->
+<section><div class="wrap">
+  <h2><span class="num">// 01</span>El problema</h2>
+  <p class="lead">Para entender cómo funciona de verdad una app full-stack, un dev tiene que revisar a mano el código, GitHub, la config, la infraestructura, los logs, las métricas… y armar el mapa mental él mismo. No existe un lugar único que muestre, de forma visual, <b>cómo están conectadas las piezas</b> — ni en diseño (qué existe) ni en tiempo real (qué está pasando ahora).</p>
+  <p>Stratalens resuelve las dos mitades: <b>Static Discovery</b> (lo que el código sugiere que existe) y <b>Runtime Observability</b> (lo que un trace real confirmó que ocurrió) — sin mezclarlas nunca sin etiquetar cuál es cuál.</p>
+  <div class="pills">
+    <span class="pill"><b>Entrada:</b> un repo de GitHub conectado por OAuth</span>
+    <span class="pill"><b>Proceso:</b> análisis estático multi-stack + telemetría OpenTelemetry</span>
+    <span class="pill"><b>Salida:</b> grafo interactivo con Source + Confidence, y modo LIVE</span>
+  </div>
+</div></section>
+
+<!-- 02 DIFERENCIADOR -->
+<section><div class="wrap">
+  <h2><span class="num">// 02</span>El diferenciador: evidencia, no adivinanza</h2>
+  <p class="lead">Existen herramientas que convierten una descripción en un diagrama pidiéndole a un LLM que "adivine" la arquitectura. Stratalens hace lo contrario: <b>cada nodo y cada relación del mapa salen de evidencia real en el código</b> — una clase parseada con Roslyn, una dependencia declarada en un <code>package.json</code>, un trace de OpenTelemetry observado.</p>
+  <div class="grid2">
+    <div class="card">
+      <h3>🔒 Regla dura del dominio</h3>
+      <p>Todo <code>Edge</code> lleva un <b>Source</b> (el archivo/config de donde se dedujo) y un <b>Confidence</b>. Es una invariante: es <i>imposible</i> construir una relación sin origen.</p>
+      <div class="why"><b>¿Por qué importa?</b> El mapa nunca muestra una conexión que no pueda explicar de dónde salió. Ese es el valor: confianza en el dato.</div>
+    </div>
+    <div class="card">
+      <h3>🚫 Rechazar lo que se ve bien pero no es cierto</h3>
+      <p>Durante el desarrollo se pidió una conexión <code>Frontend→Security</code> que quedaba estética. Se <b>rechazó</b>: no había evidencia de que el frontend hablara con la auth.</p>
+      <div class="why"><b>¿Por qué?</b> Un diagrama honesto vale más que uno bonito pero inventado. Relajar la regla erosionaría la confianza en <i>todo</i> el mapa.</div>
+    </div>
+  </div>
+</div></section>
+
+<!-- 03 STACK / DECISIONS -->
+<section><div class="wrap">
+  <h2><span class="num">// 03</span>Decisiones técnicas (el <i>por qué</i>)</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3><span class="tag">Backend</span> ASP.NET Core + Clean Architecture</h3>
+      <p>4 proyectos: <code>Domain</code> · <code>Application</code> · <code>Infrastructure</code> · <code>Api</code>. Domain no referencia nada; Application define interfaces; Api nunca toca <code>DbContext</code>.</p>
+      <div class="why"><b>¿Por qué?</b> Las reglas de negocio (qué es un nodo, cómo se calcula confidence) no dependen de PostgreSQL, GitHub ni Roslyn — se pueden testear y cambiar sin tocar infraestructura.</div>
+    </div>
+    <div class="card">
+      <h3><span class="tag">Analyzers</span> Sistema de plugins (<code>ILanguageAnalyzer</code>)</h3>
+      <p>El pipeline recibe los analyzers como <code>IEnumerable&lt;ILanguageAnalyzer&gt;</code> y corre los que apliquen. Añadir un stack = registrar una clase más.</p>
+      <div class="why"><b>¿Por qué?</b> Cada categoría nueva (Security, Message Bus, Workers, Cloud) fue un analyzer independiente, sin tocar el pipeline ni romper nada. Abierto para extensión (O de SOLID).</div>
+    </div>
+    <div class="card">
+      <h3><span class="tag">C#</span> Roslyn sintáctico, no semántico</h3>
+      <p>El analyzer de C# razona sobre el árbol de sintaxis, sin restaurar NuGet ni type-checker.</p>
+      <div class="why"><b>¿Por qué?</b> Leemos archivos sueltos de GitHub; la resolución semántica de tipos de framework no es viable. Es una inferencia honesta → por eso <code>Confidence &lt; 100</code>.</div>
+    </div>
+    <div class="card">
+      <h3><span class="tag">React/TS</span> Subproceso Node por stdin</h3>
+      <p>Un proceso Node con el TS Compiler API detecta components/pages/services; .NET le pasa los archivos por stdin (JSON) y recibe el resultado por stdout, detrás de un <code>seam</code>.</p>
+      <div class="why"><b>¿Por qué?</b> No toca disco (nunca persistimos código ajeno) y el seam hace testeable el mapeo sin Node instalado.</div>
+    </div>
+    <div class="card">
+      <h3><span class="tag">Runtime</span> OpenTelemetry (OTLP protobuf real)</h3>
+      <p>El demo exporta traces por OTLP/HTTP a un endpoint propio; se persisten como <code>Trace</code>/<code>Span</code> y promocionan edges a <code>Confidence=100</code>.</p>
+      <div class="why"><b>¿Por qué?</b> Un edge confirmado por un trace real deja de ser inferencia. Es la materialización de "Static Discovery vs Runtime Observability".</div>
+    </div>
+    <div class="card">
+      <h3><span class="tag">LIVE</span> SignalR con un Hub por proyecto</h3>
+      <p>Al ingestar un trace, se emite un evento al grupo del proyecto; el frontend anima el recorrido en React Flow. Application no depende de SignalR (puerto <code>ILiveTraceNotifier</code>).</p>
+      <div class="why"><b>¿Por qué?</b> El mapa reacciona en vivo sin acoplar la lógica de negocio a la tecnología de tiempo real.</div>
+    </div>
+  </div>
+</div></section>
+
+<!-- 04 ARQUITECTURA -->
+<section><div class="wrap">
+  <h2><span class="num">// 04</span>Arquitectura</h2>
+  <p>Flujo de una request y las capas que atraviesa. La regla de dependencias apunta siempre hacia adentro (Domain no sabe que existe nadie más).</p>
+<pre class="diagram"><span class="cmt">// Clean Architecture — la dependencia apunta hacia adentro</span>
+Request → <span class="flow">Controller/Hub</span> → <span class="flow">Application (UseCases)</span> → <span class="flow">Infrastructure</span> → DB / GitHub / Node
+                 │                    │
+            Middleware          <span class="hl">Domain Models</span>  <span class="cmt">(Node, Edge, Trace, Span, Project)</span>
+
+<span class="cmt">// Pipeline de análisis (plugin system)</span>
+AnalyzeRepositoryUseCase
+   └─ IProviderConnector (GitHub) ── lee árbol + contenido
+   └─ IEnumerable&lt;ILanguageAnalyzer&gt;
+        ├─ CSharpAnalyzer        <span class="cmt">(Roslyn)</span>
+        ├─ ReactTypeScriptAnalyzer <span class="cmt">(subproceso Node)</span>
+        ├─ NodeExpressAnalyzer   ├─ DockerAnalyzer   ├─ AuthAnalyzer
+        ├─ MessageBusAnalyzer    ├─ WorkersAnalyzer  └─ CloudAnalyzer
+   └─ <span class="hl">SystemGraphBuilder</span> ── agrega detección fina → grafo grueso + jerarquía
+   └─ IGraphRepository (EF Core + PostgreSQL, metadata JSONB)</pre>
+  <div class="pills">
+    <span class="pill"><b>Static:</b> Node/Edge con Source + Confidence &lt; 100</span>
+    <span class="pill"><b>Runtime:</b> Trace/Span → Edge Confidence = 100</span>
+    <span class="pill"><b>Jerarquía:</b> Node.ParentNodeId (adjacency list) → expand/collapse</span>
+  </div>
+</div></section>
+
+<!-- 05 DETECTORES -->
+<section><div class="wrap">
+  <h2><span class="num">// 05</span>Qué detecta el mapa</h2>
+  <p>8 categorías, todas por <b>evidencia de manifiesto/código real</b> (confidence 90 para lo inferido, 100 solo para runtime confirmado). Nunca por convención de carpetas sola.</p>
+  <div class="dets">
+    <div class="det" style="border-color:#58a6ff"><div class="name">Frontend</div><div class="ev">React / TS·JSX · TS Compiler API</div></div>
+    <div class="det" style="border-color:#a371f7"><div class="name">Backend</div><div class="ev">ASP.NET Core (Roslyn) · Express (package.json)</div></div>
+    <div class="det" style="border-color:#3fb950"><div class="name">Database</div><div class="ev">PostgreSQL · DbContext / driver pg</div></div>
+    <div class="det" style="border-color:#db61a2"><div class="name">Security</div><div class="ev">JWT · jsonwebtoken / JwtBearer</div></div>
+    <div class="det" style="border-color:#db6d28"><div class="name">Message Bus</div><div class="ev">RabbitMQ / Kafka · amqplib·kafkajs·MassTransit</div></div>
+    <div class="det" style="border-color:#39c5cf"><div class="name">Workers</div><div class="ev">Background jobs · BullMQ·Hangfire·Quartz</div></div>
+    <div class="det" style="border-color:#79c0ff"><div class="name">Cloud</div><div class="ev">AWS / Azure / GCP · SDK del proveedor</div></div>
+    <div class="det" style="border-color:#d29922"><div class="name">Infra</div><div class="ev">Docker · Dockerfile / compose</div></div>
+  </div>
+</div></section>
+
+<!-- 06 FEATURES -->
+<section><div class="wrap">
+  <h2><span class="num">// 06</span>Funcionalidades</h2>
+  <div class="grid2">
+    <div class="card"><h3>🔑 Login con GitHub OAuth</h3><p>Autenticación + autorización para leer repos. El <code>access_token</code> se cifra en reposo con Data Protection API antes de persistirse; nunca aparece en logs ni respuestas.</p></div>
+    <div class="card"><h3>📂 Conectar y analizar un repo</h3><p>El usuario ve sus repos, elige uno, y el pipeline construye el grafo de forma síncrona. Re-análisis bajo demanda: reemplaza el grafo (idempotente).</p></div>
+    <div class="card"><h3>🗺️ Grafo interactivo (React Flow)</h3><p>Canvas con zoom/pan/selección, nodos custom estética "terminal", panel de detalle con la metadata y el <b>Source</b> de cada nodo.</p></div>
+    <div class="card"><h3>🧩 Jerarquía expand/collapse</h3><p>El Backend se expande en un contenedor con sus Controllers/Services dentro (contención real, no flechas). Layout size-aware para que nada se solape.</p></div>
+    <div class="card"><h3>⚡ Modo LIVE</h3><p>Una request real anima el recorrido Frontend→Backend→DB en el mapa, muestra la duración total, y distingue visualmente lo confirmado (runtime) de lo inferido (estático).</p></div>
+    <div class="card"><h3>📊 Timeline de una request</h3><p>Panel waterfall con los spans de un trace proporcionales a su duración — span raíz (backend) e hijo (query a la DB) con el total.</p></div>
+  </div>
+</div></section>
+
+<!-- 07 BUGS -->
+<section><div class="wrap">
+  <h2><span class="num">// 07</span>Bugs reales (causa raíz + fix)</h2>
+  <p>Los que más enseñaron. Todos diagnosticados a causa raíz, no parcheados en la superficie.</p>
+
+  <div class="bug">
+    <div class="meta">AUTH · seguridad</div>
+    <h3>Endpoints protegidos daban 302 a GitHub en vez de 401</h3>
+    <p><b>Causa:</b> <code>Program.cs</code> tenía <code>DefaultChallengeScheme = "GitHub"</code>, así que una request sin sesión redirigía al OAuth en vez de responder 401. Era invisible en los 114 tests porque la factory de test sustituía ese valor.</p>
+    <div class="fix"><b>Fix:</b> quitar el default explícito → cae al esquema Cookie, cuyo <code>OnRedirectToLogin</code> ya devolvía 401. El login real sigue pidiendo <code>"GitHub"</code> explícito. Verificado con curl real.</div>
+  </div>
+
+  <div class="bug">
+    <div class="meta">ANALYZERS · runtime</div>
+    <h3><code>IOException: the pipe is being closed</code> al analizar repos JSX reales</h3>
+    <p><b>Causa:</b> el runner del subproceso Node resolvía el script con un fallback (<code>BaseDirectory/analyzers-node/…</code>) que <b>nunca existe</b> en <code>bin/</code>. Node moría al instante y .NET reventaba escribiendo a un stdin ya cerrado — un error que no decía nada de la causa real.</p>
+    <div class="fix"><b>Fix:</b> portar a la DI el mismo algoritmo que ya usaban los tests (subir por el árbol buscando <code>analyzers-node/src/analyze.mjs</code>), con <code>NODE_ANALYZER_SCRIPT</code> como escape hatch para despliegues.</div>
+  </div>
+
+  <div class="bug">
+    <div class="meta">ANALYZERS · cobertura</div>
+    <h3>El pipeline no detectaba nada en repos JSX puros ni backends Express</h3>
+    <p><b>Causa:</b> <code>ReactTypeScriptAnalyzer</code> exigía <code>.ts/.tsx</code> (el subproceso ya sabía parsear JSX, el bloqueo era el filtro .NET), y <b>no existía ningún analyzer para Express</b>.</p>
+    <div class="fix"><b>Fix:</b> ampliar el filtro a <code>.js/.jsx</code> y crear <code>NodeExpressAnalyzer</code> que confirma <code>express</code>/<code>pg</code> leyendo el <code>package.json</code> real (nunca infiere backend solo por convención de carpetas).</div>
+  </div>
+
+  <div class="bug">
+    <div class="meta">FRONTEND · layout</div>
+    <h3>Al expandir el Backend, el contenedor chocaba con PostgreSQL/Docker</h3>
+    <p><b>Causa:</b> el contenedor expandido (~498px) es más ancho que el <code>LAYER_WIDTH</code> fijo (400px), así que se metía en la columna de la capa siguiente.</p>
+    <div class="fix"><b>Fix:</b> layout <b>size-aware</b> — la X de cada capa parte del ancho REAL de la anterior, y dentro de una capa los nodos se apilan por su alto real. Un contenedor ancho ahora empuja lo siguiente a la derecha sin solaparse.</div>
+  </div>
+
+  <div class="bug">
+    <div class="meta">FRONTEND · legibilidad</div>
+    <h3>Las etiquetas de los edges eran ilegibles sobre el canvas oscuro</h3>
+    <p><b>Causa:</b> React Flow pinta el fondo de la etiqueta al 75% de opacidad por defecto (su CSS base), así que sobre el fondo oscuro con glow el texto se mezclaba.</p>
+    <div class="fix"><b>Fix:</b> forzar <code>fillOpacity:1</code> + padding + radio → una píldora opaca y legible de verdad.</div>
+  </div>
+
+  <div class="bug">
+    <div class="meta">RUNTIME · invariante de dominio</div>
+    <h3>El primer trace en frío rompía la invariante "un solo span raíz"</h3>
+    <p><b>Causa:</b> con el demo frío, la primera request parte los spans en 2 batches OTLP; el batch del span hijo llega sin su raíz, violando la asunción del MVP (un trace = un span raíz).</p>
+    <div class="fix"><b>Fix:</b> documentado como límite conocido del MVP; con el demo caliente los spans van juntos y el trace promueve el edge a runtime correctamente. Diagnóstico honesto &gt; parche que oculte la asunción.</div>
+  </div>
+</div></section>
+
+<!-- 08 ENTREVISTA -->
+<section><div class="wrap">
+  <h2><span class="num">// 08</span>Preparación para entrevista</h2>
+
+  <details class="qa"><summary>¿Por qué separar Static Discovery de Runtime Observability?</summary>
+    <div class="model">Porque responden preguntas distintas: lo estático dice "qué existe según el código" (una inferencia), lo runtime dice "qué ocurrió de verdad" (un hecho observado). Mezclarlas sin etiquetar engañaría al usuario. Lo materialicé como una invariante: un edge estático tiene <code>Confidence &lt; 100</code>; solo un trace real produce <code>Confidence = 100</code>.</div>
+  </details>
+
+  <details class="qa"><summary>¿Por qué usar Roslyn / TS Compiler y no pedirle a un LLM que arme el diagrama?</summary>
+    <div class="model">Porque el valor del producto es la <b>confianza en el dato</b>. Un LLM adivina; un compilador parsea el AST real. Mi analyzer extrae Controllers/Services del árbol de sintaxis de C# y detecta dependencias del <code>package.json</code> real — cada relación es verificable contra un archivo concreto. Es determinista, testeable y honesto.</div>
+  </details>
+
+  <details class="qa"><summary>¿Por qué <code>Confidence &lt; 100</code> es una invariante de dominio y no una convención?</summary>
+    <div class="model">Porque una convención se puede violar sin querer; una invariante no. La entidad <code>Edge</code> tiene constructor privado + factory methods: <code>FromStaticAnalysis</code> valida <code>0..99</code>, y <code>FromRuntimeTrace</code> es el ÚNICO camino que produce 100. Así "confidence 100 solo viene de runtime" se cumple <i>por construcción</i>, no por disciplina.</div>
+  </details>
+
+  <details class="qa"><summary>¿Cómo modelaste la jerarquía de nodos en una base relacional?</summary>
+    <div class="model">Con el patrón <b>Adjacency List</b>: un campo <code>ParentNodeId</code> nullable (null = raíz). Para un árbol poco profundo es la elección correcta — nested sets o closure table resuelven problemas que no tengo. "Máximo un padre" queda garantizado por construcción (un solo campo), y la auto-referencia es imposible porque el <code>Id</code> se genera dentro del constructor: validarla sería código muerto.</div>
+  </details>
+
+  <details class="qa"><summary>¿Cómo evitás que el mapa invente relaciones?</summary>
+    <div class="model">Cada <code>Edge</code> exige un <code>Source</code> no vacío como invariante de dominio, y cada analyzer confirma con evidencia real (una dependencia declarada, no una carpeta con cierto nombre). Incluso rechacé una conexión que un usuario me pidió porque no tenía respaldo en el código — preferí el diagrama honesto.</div>
+  </details>
+
+  <details class="qa"><summary>¿Cómo evitás que las capas de Clean Architecture se filtren?</summary>
+    <div class="model">Por las referencias de proyecto: <code>Domain</code> no referencia nada, <code>Application</code> solo define interfaces (<code>IGraphRepository</code>, <code>ILanguageAnalyzer</code>…), y <code>Api</code> nunca inyecta <code>DbContext</code> directo. El caso de uso no sabe que detrás hay PostgreSQL, GitHub ni Roslyn — solo depende de abstracciones (D de SOLID).</div>
+  </details>
+
+  <details class="qa"><summary>¿Cómo autenticás el endpoint de telemetría, que lo llama una máquina y no un usuario?</summary>
+    <div class="model">Con una <b>clave de ingesta por proyecto</b> (auth máquina-a-máquina), hasheada con SHA-256 en la base — el endpoint OTLP no depende de una cookie de sesión. Todo el resto de la API sí exige auth de usuario; login/callback de OAuth son la única excepción.</div>
+  </details>
+
+  <details class="qa"><summary>¿Por qué un sistema de plugins para los analyzers?</summary>
+    <div class="model">Porque el catálogo de stacks crece. El pipeline recibe <code>IEnumerable&lt;ILanguageAnalyzer&gt;</code> y corre los que apliquen; añadir Security, Message Bus, Workers o Cloud fue registrar una clase más, sin tocar el orquestador. Un test de integración me recordó que eso también aplica a los tests: solo ejercitan lo que conectás en su setup.</div>
+  </details>
+</div></section>
+
+<footer>
+  <div class="wrap">
+    <p><b>Stratalens</b> — proyecto de portfolio · Clean Architecture (.NET) · React + React Flow · PostgreSQL · OpenTelemetry · SignalR</p>
+    <p>Construido con Spec-Driven Development (SDD) y flujo git profesional: feature branch → PR → CI verde → branch protection.</p>
+  </div>
+</footer>
+
+</body>
+</html>
